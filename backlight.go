@@ -212,7 +212,7 @@ func (s *Swaypanion) registerBacklight() {
 	}
 
 	s.register(
-		"brightness", s.brightnessHandler, "Get or set the screen brightness",
+		"brightness", s.brightnessHandler, "get or set the screen brightness",
 		"", "show the screen brightness in percent",
 		"up", "make the screen brighter",
 		"down", "make the screen dimmer",

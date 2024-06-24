@@ -203,10 +203,10 @@ func (s *Swaypanion) registerWorkspaces() {
 	}
 
 	s.register(
-		"dynworkspace", s.dynworkspaceHandler, "Move to workspace with dynamic creation if needed",
-		"previous", "Go to the previous workspace, creating it if needed",
-		"next", "Go to the next workspace, creating it if needed",
-		"move previous", "Move the focused window to the previous workspace, creating it if needed",
-		"move next", "Move the focused window to the next workspace, creating it if needed",
+		"dynworkspace", s.dynworkspaceHandler, "move to workspace with dynamic creation if needed",
+		"previous", "go to the previous workspace, creating it if needed",
+		"next", "go to the next workspace, creating it if needed",
+		"move previous", "move the focused window to the previous workspace, creating it if needed",
+		"move next", "move the focused window to the next workspace, creating it if needed",
 	)
 }

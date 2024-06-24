@@ -234,7 +234,7 @@ func (s *Swaypanion) registerVolume() {
 	}
 
 	s.register(
-		"volume", s.volumeHandler, "Get or set the volume",
+		"volume", s.volumeHandler, "get or set the volume",
 		"", "show the volume in percent",
 		"up", "make the volume higher",
 		"down", "make the volume lower",
