@@ -22,7 +22,10 @@ func (s *Swaypanion) unknownCommand(w io.Writer, command string) error {
 func (s *Swaypanion) commandsList(w io.Writer) error {
 	var buf bytes.Buffer
 
-	buf.WriteString("Known commands:\n- help: show commands and arguments\n")
+	buf.WriteString("Known commands:\n")
+	buf.WriteString("- help: show commands and arguments\n")
+	buf.WriteString("- config: show current configuration\n")
+	buf.WriteString("- defaultconfig: show default configuration\n")
 
 	for name, reg := range s.processors {
 		buf.WriteString("- ")

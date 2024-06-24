@@ -68,17 +68,30 @@ func (s *Swaypanion) handleSocket(conn net.Conn) {
 
 	command := string(cmdAndArgs[0])
 
-	if command == "" {
+	switch command {
+	case "":
 		if err := s.commandsList(conn); err != nil {
 			slog.Error("Failed to send commands list", "error", err)
 		}
 
 		return
-	}
-
-	if command == "help" {
+	case "help":
 		if err := s.help(conn, cmdAndArgs[1:]...); err != nil {
 			slog.Error("Failed to send help", "error", err)
+		}
+
+		return
+	case "config":
+		if err := s.dumpConfig(conn); err != nil {
+			slog.Error("Failed to send config information", "error", err)
+
+		}
+
+		return
+	case "defaultconfig":
+		if err := s.dumpDefaultConfig(conn); err != nil {
+			slog.Error("Failed to send config information", "error", err)
+
 		}
 
 		return

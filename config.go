@@ -1,6 +1,8 @@
 package swaypanion
 
 import (
+	"bytes"
+	"io"
 	"os"
 	"strings"
 
@@ -67,4 +69,33 @@ func newConfig() (*config, error) {
 	conf.haveDefaults()
 
 	return conf, nil
+}
+
+func (s *Swaypanion) dumpConfig(w io.Writer) error {
+	var buf bytes.Buffer
+
+	buf.WriteString("Current configuration\n---------------------\n\n")
+
+	if err := yaml.NewEncoder(&buf).Encode(s.conf); err != nil {
+		return err
+	}
+
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+func (s *Swaypanion) dumpDefaultConfig(w io.Writer) error {
+	conf := &config{}
+	conf.haveDefaults()
+
+	var buf bytes.Buffer
+
+	buf.WriteString("Default configuration\n---------------------\n\n")
+
+	if err := yaml.NewEncoder(&buf).Encode(conf); err != nil {
+		return err
+	}
+
+	_, err := buf.WriteTo(w)
+	return err
 }
