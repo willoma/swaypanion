@@ -45,3 +45,7 @@ The `help` command lists all available commands.
 | `dynworkspace next` | go to the next workspace, creating it if needed |
 | `dynworkspace move previous` | move the focused window to the previous workspace, creating it if needed |
 | `dynworkspace move next` | move the focused window to the next workspace, creating it if needed |
+
+## Notifications
+
+- Level notification on volume change

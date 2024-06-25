@@ -70,7 +70,7 @@ func New() (*Swaypanion, error) {
 		return nil, err
 	}
 
-	if s.volume, err = NewVolume(s.conf.Volume); err != nil {
+	if s.volume, err = NewVolume(s.conf.Volume, s.notification); err != nil {
 		return nil, err
 	}
 
