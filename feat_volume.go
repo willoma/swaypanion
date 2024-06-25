@@ -8,7 +8,6 @@ import (
 	"net"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/jfreymuth/pulse/proto"
 )
@@ -49,9 +48,7 @@ type Volume struct {
 	paConn    net.Conn
 	sinkIndex uint32
 
-	announcementMu        sync.Mutex
-	volumeReceivers       []chan int
-	latestAnnouncedVolume int
+	subscriptions *subscription[int]
 }
 
 func NewVolume(conf VolumeConfig, notification *Notification) (*Volume, error) {
@@ -61,34 +58,35 @@ func NewVolume(conf VolumeConfig, notification *Notification) (*Volume, error) {
 	}
 
 	v := &Volume{
-		conf:         conf,
-		notification: notification,
-		stepSizeRaw:  float64(conf.StepSize) * volumeOnePercentRaw,
-		paClient:     client,
-		paConn:       conn,
+		conf:          conf,
+		notification:  notification,
+		stepSizeRaw:   float64(conf.StepSize) * volumeOnePercentRaw,
+		paClient:      client,
+		paConn:        conn,
+		subscriptions: newSubscription[int](),
 	}
 
-	return v, v.Initialize()
-}
-
-func (v *Volume) Initialize() error {
 	if err := v.paClient.Request(&proto.SetClientName{Props: proto.PropList{}}, nil); err != nil {
-		return err
+		return nil, err
 	}
 
 	lookupSink := proto.LookupSinkReply{}
 	if err := v.paClient.Request(&proto.LookupSink{SinkName: v.conf.SinkName}, &lookupSink); err != nil {
-		return err
+		return nil, err
 	}
 
 	v.sinkIndex = lookupSink.SinkIndex
 	v.paClient.Callback = v.paCallback
 
 	if err := v.paClient.Request(&proto.Subscribe{Mask: proto.SubscriptionMaskSink}, nil); err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return v, nil
+}
+
+func (v *Volume) Close() error {
+	return v.paConn.Close()
 }
 
 func (v *Volume) paCallback(val any) {
@@ -206,17 +204,8 @@ func (v *Volume) announceVolume() {
 		return
 	}
 
-	v.announcementMu.Lock()
-	defer v.announcementMu.Unlock()
-
-	if volume == v.latestAnnouncedVolume {
+	if !v.subscriptions.Publish(volume) {
 		return
-	}
-
-	v.latestAnnouncedVolume = volume
-
-	for _, ch := range v.volumeReceivers {
-		ch <- volume
 	}
 
 	if v.notification != nil {
@@ -229,31 +218,6 @@ func (v *Volume) announceVolume() {
 			v.notification.NotifyLevel("volume_high", volume)
 		}
 	}
-}
-
-func (v *Volume) Subscribe() (volume <-chan int, unsubscribe func()) {
-	v.announcementMu.Lock()
-	defer v.announcementMu.Unlock()
-
-	volumeCh := make(chan int, 2)
-	v.volumeReceivers = append(v.volumeReceivers, volumeCh)
-
-	return volumeCh, func() {
-		v.announcementMu.Lock()
-		defer v.announcementMu.Unlock()
-
-		newVol := make([]chan int, 0, len(v.volumeReceivers)-1)
-		for _, vol := range v.volumeReceivers {
-			if vol != volumeCh {
-				newVol = append(newVol, vol)
-			}
-		}
-		v.volumeReceivers = newVol
-	}
-}
-
-func (v *Volume) Close() error {
-	return v.paConn.Close()
 }
 
 func (s *Swaypanion) volumeHandler(args []string, w io.Writer) error {
@@ -289,10 +253,9 @@ func (s *Swaypanion) volumeHandler(args []string, w io.Writer) error {
 
 		return s.volume.SetVolume(value)
 	case "subscribe":
-		volume, unsubscribe := s.volume.Subscribe()
-		for {
-			vol := <-volume
+		volume, id := s.volume.subscriptions.Subscribe()
 
+		for vol := range volume {
 			var err error
 			if vol == -1 {
 				err = writeString(w, "muted")
@@ -301,7 +264,7 @@ func (s *Swaypanion) volumeHandler(args []string, w io.Writer) error {
 			}
 
 			if err != nil {
-				unsubscribe()
+				s.volume.subscriptions.Unsubscribe(id)
 
 				if strings.Contains(err.Error(), "broken pipe") {
 					return nil
@@ -311,6 +274,8 @@ func (s *Swaypanion) volumeHandler(args []string, w io.Writer) error {
 
 			}
 		}
+
+		return nil
 	default:
 		return s.unknownArgument(w, "volume", args[0])
 	}
