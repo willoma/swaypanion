@@ -17,3 +17,31 @@ Swaypanion tries to combine different useful features for sway and similar deskt
 The `swaypanionc` command may be used to send commands and receive responses.
 
 The `help` command lists all available commands.
+
+## Commands
+
+| Command | Result |
+|-|-|
+| **Brightness** | |
+| `brightness` | show the screen brightness in percent |
+| `brightness up` | make the screen brighter |
+| `brightness down` | make the screen dimmer |
+| `brightness set X` | set the screen brightness to X percent |
+| **Player** | |
+| `player` | start or show the audio player |
+| `player playpause` | play or pause the music |
+| `player previous` | go back to previous track |
+| `player next` | skip to next track |
+| **Volume** | |
+| `volume` | show the volume in percent |
+| `volume up` | make the volume higher |
+| `volume down` | make the volume lower |
+| `volume mute` | toggle the mute status |
+| `volume set X` | set the volume to X percent |
+| **Windows** | |
+| `window hide_or_close` | hide or kill the focused window, according to the hide_not_close configuration |
+| **Workspaces** | |
+| `dynworkspace previous` | go to the previous workspace, creating it if needed |
+| `dynworkspace next` | go to the next workspace, creating it if needed |
+| `dynworkspace move previous` | move the focused window to the previous workspace, creating it if needed |
+| `dynworkspace move next` | move the focused window to the next workspace, creating it if needed |
