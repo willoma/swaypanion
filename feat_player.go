@@ -2,15 +2,18 @@ package swaypanion
 
 import (
 	"errors"
+	"fmt"
 	"html"
 	"io"
 	"strings"
+	"sync"
 
 	"github.com/godbus/dbus/v5"
 )
 
 const (
 	playerMessagePrefix = "org.mpris.MediaPlayer2.Player"
+	playerObjectPath    = "/org/mpris/MediaPlayer2"
 
 	defaultPlayerName           = "spotify"
 	defaultPlayerCmdType        = CommandTypeSway
@@ -77,20 +80,75 @@ type Player struct {
 
 	sway *SwayClient
 	dbus *dbus.Conn
+
+	signalCh chan *dbus.Signal
+
+	currentMu       sync.Mutex
+	currentMetadata playerMetadata
+	currentStatus   string
+
+	subscriptions *subscription[string]
 }
 
 func NewPlayer(conf PlayerConfig, sway *SwayClient) (*Player, error) {
+	p := &Player{
+		conf:          conf,
+		sway:          sway,
+		signalCh:      make(chan *dbus.Signal, 10),
+		subscriptions: newSubscription[string](),
+	}
 
-	dbusConn, err := dbus.SessionBus()
+	var err error
+	p.dbus, err = dbus.SessionBus()
 	if err != nil {
 		return nil, err
 	}
 
-	return &Player{
-		conf: conf,
-		sway: sway,
-		dbus: dbusConn,
-	}, nil
+	if err := p.dbus.AddMatchSignal(
+		dbus.WithMatchObjectPath(playerObjectPath),
+		dbus.WithMatchInterface("org.freedesktop.DBus.Properties"),
+	); err != nil {
+		return nil, err
+	}
+
+	go p.dbusSignal()
+
+	return p, nil
+}
+
+func (p *Player) Close() {
+	p.dbus.RemoveSignal(p.signalCh)
+	p.dbus.RemoveMatchSignal(
+		dbus.WithMatchObjectPath(playerObjectPath),
+		dbus.WithMatchInterface("org.freedesktop.DBus.Properties"),
+	)
+}
+
+func (p *Player) dbusSignal() {
+	p.dbus.Signal(p.signalCh)
+	for val := range p.signalCh {
+		// https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces-properties
+		changedProperties, ok := val.Body[1].(map[string]dbus.Variant)
+		if !ok {
+			continue
+		}
+
+		p.currentMu.Lock()
+
+		if status, ok := changedProperties["PlaybackStatus"]; ok {
+			if statusValue, ok := status.Value().(string); ok {
+				p.currentStatus = statusValue
+			}
+		}
+
+		if metadata, ok := changedProperties["Metadata"]; ok {
+			p.currentMetadata = dbusExtractPlayerMetadata(metadata.Value())
+		}
+
+		p.subscriptions.Publish(p.unsafeFormatStatus())
+
+		p.currentMu.Unlock()
+	}
 }
 
 func (p *Player) Launch() error {
@@ -116,90 +174,82 @@ func (p *Player) Previous() error {
 	return err
 }
 
-func (p *Player) Metadata() (playerMetadata, error) {
-	result := playerMetadata{}
-
+func (p *Player) unsafeUpdateMetadata() error {
 	response, err := p.call("org.freedesktop.DBus.Properties.Get", playerMessagePrefix, "Metadata")
 	if err != nil {
-		return result, err
+		return err
 	}
 
-	if array, ok := response.(map[string]dbus.Variant); ok {
-		for k, v := range array {
-			switch k {
-			case "xesam:album":
-				result.album = v.Value().(string)
-			case "xesam:artist":
-				result.artists = v.Value().([]string)
-			case "xesam:title":
-				result.title = v.Value().(string)
-			}
-		}
-	}
+	p.currentMetadata = dbusExtractPlayerMetadata(response)
 
-	return result, nil
+	return nil
 }
 
-func (p *Player) PlaybackStatus() (string, error) {
+func (p *Player) unsafeUpdatePlaybackStatus() error {
 	response, err := p.call("org.freedesktop.DBus.Properties.Get", playerMessagePrefix, "PlaybackStatus")
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	if v, ok := response.(string); ok {
-		return v, nil
+		p.currentStatus = v
 	}
 
-	return "", nil
+	return nil
+}
+
+func (p *Player) unsafeFormatStatus() string {
+	var artist string
+	if len(p.currentMetadata.artists) > 0 {
+		artist = p.currentMetadata.artists[0]
+	}
+	artists := strings.Join(p.currentMetadata.artists, ", ")
+
+	if *p.conf.EscapeHTML {
+		return strings.NewReplacer(
+			"<status>", p.currentStatus,
+			"<title>", html.EscapeString(p.currentMetadata.title),
+			"<artist>", html.EscapeString(artist),
+			"<artists>", html.EscapeString(artists),
+			"<album>", html.EscapeString(p.currentMetadata.album),
+			"\\n", "\n",
+			"\\r", "\r",
+		).Replace(p.conf.StatusFormat)
+	} else {
+		return strings.NewReplacer(
+			"<status>", p.currentStatus,
+			"<title>", p.currentMetadata.title,
+			"<artist>", artist,
+			"<artists>", artists,
+			"<album>", p.currentMetadata.album,
+			"\\n", "\n",
+			"\\r", "\r",
+		).Replace(p.conf.StatusFormat)
+	}
 }
 
 func (p *Player) FormattedStatus() (string, error) {
-	status, err := p.PlaybackStatus()
-	if err != nil {
+	p.currentMu.Lock()
+	defer p.currentMu.Unlock()
+
+	if err := p.unsafeUpdatePlaybackStatus(); err != nil {
 		if errors.Is(err, ErrNoPlayerFound) {
 			return p.conf.NoPlayerStatus, nil
 		}
 		return "", err
 	}
 
-	data, err := p.Metadata()
-	if err != nil {
+	if err := p.unsafeUpdateMetadata(); err != nil {
 		return "", err
 	}
 
-	var artist string
-	if len(data.artists) > 0 {
-		artist = data.artists[0]
-	}
-	artists := strings.Join(data.artists, ", ")
-
-	if *p.conf.EscapeHTML {
-		return strings.NewReplacer(
-			"<status>", status,
-			"<title>", html.EscapeString(data.title),
-			"<artist>", html.EscapeString(artist),
-			"<artists>", html.EscapeString(artists),
-			"<album>", html.EscapeString(data.album),
-			"\\n", "\n",
-			"\\r", "\r",
-		).Replace(p.conf.StatusFormat), nil
-	} else {
-		return strings.NewReplacer(
-			"<status>", status,
-			"<title>", data.title,
-			"<artist>", artist,
-			"<artists>", artists,
-			"<album>", data.album,
-			"\\n", "\n",
-			"\\r", "\r",
-		).Replace(p.conf.StatusFormat), nil
-	}
+	return p.unsafeFormatStatus(), nil
 }
 
 func (p *Player) call(method string, args ...any) (any, error) {
 	call := p.dbus.Object(
 		"org.mpris.MediaPlayer2."+p.conf.Name,
-		"/org/mpris/MediaPlayer2",
+		playerObjectPath,
 	).Call(method, 0, args...)
 
 	if call.Err != nil {
@@ -223,7 +273,10 @@ func (p *Player) call(method string, args ...any) (any, error) {
 
 func (s *Swaypanion) playerHandler(args []string, w io.Writer) error {
 	if len(args) == 0 {
-		if _, err := s.player.PlaybackStatus(); err != nil {
+		s.player.currentMu.Lock()
+		defer s.player.currentMu.Unlock()
+
+		if err := s.player.unsafeUpdatePlaybackStatus(); err != nil {
 			if !errors.Is(err, ErrNoPlayerFound) {
 				return err
 			}
@@ -248,6 +301,23 @@ func (s *Swaypanion) playerHandler(args []string, w io.Writer) error {
 		return s.player.Previous()
 	case "next":
 		return s.player.Next()
+	case "subscribe":
+		status, id := s.player.subscriptions.Subscribe()
+
+		for st := range status {
+			if err := writeString(w, st); err != nil {
+				s.player.subscriptions.Unsubscribe(id)
+
+				if strings.Contains(err.Error(), "broken pipe") {
+					return nil
+				}
+
+				return fmt.Errorf("failed to send player status to client: %w", err)
+
+			}
+		}
+
+		return nil
 	default:
 		return s.unknownArgument(w, "player", args[0])
 	}
@@ -264,5 +334,6 @@ func (s *Swaypanion) registerPlayer() {
 		"playpause", "play or pause the music",
 		"previous", "go back to previous track",
 		"next", "skip to next track",
+		"subscribe", "receive the player status as soon as it changes",
 	)
 }

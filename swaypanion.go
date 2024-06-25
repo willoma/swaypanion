@@ -96,6 +96,8 @@ func (s *Swaypanion) Stop() {
 		}
 	}
 
+	s.player.Close()
+
 	if s.socket != nil {
 		if err := s.socket.Close(); err != nil {
 			slog.Error("Failed to close socket listener", "error", err)
