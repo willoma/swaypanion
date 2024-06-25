@@ -213,14 +213,19 @@ func (s *Swaypanion) volumeHandler(args []string, w io.Writer) error {
 	}
 
 	if muted {
-		s.notification.NotifyLevel("volume_muted", -1)
-		return writeString(w, "muted")
+
+		if s.notification != nil {
+			s.notification.NotifyLevel("volume_muted", -1)
+			return writeString(w, "muted")
+		}
 	}
 
-	if volume < 50 {
-		s.notification.NotifyLevel("volume_low", volume)
-	} else {
-		s.notification.NotifyLevel("volume_high", volume)
+	if s.notification != nil {
+		if volume < 50 {
+			s.notification.NotifyLevel("volume_low", volume)
+		} else {
+			s.notification.NotifyLevel("volume_high", volume)
+		}
 	}
 
 	return writeInt(w, volume)

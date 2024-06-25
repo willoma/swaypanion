@@ -72,6 +72,10 @@ type Notification struct {
 }
 
 func NewNotification(conf NotificationConfig) (*Notification, error) {
+	if conf.Disable {
+		return nil, nil
+	}
+
 	dbusConn, err := dbus.SessionBus()
 	if err != nil {
 		return nil, err
@@ -85,10 +89,6 @@ func NewNotification(conf NotificationConfig) (*Notification, error) {
 }
 
 func (n *Notification) NotifyLevel(labelName string, value int) {
-	if n.conf.Disable {
-		return
-	}
-
 	var (
 		summary string
 		hints   = map[string]dbus.Variant{}
@@ -119,7 +119,7 @@ func (n *Notification) NotifyLevel(labelName string, value int) {
 		n.conf.Level.Timeout, // expire_timeout
 	)
 	if call.Err != nil {
-		slog.Error("Failed to trigger level notification", "error", call.Err)
+		slog.Error("Failed to send level notification", "error", call.Err)
 	}
 
 	if len(call.Body) > 0 {

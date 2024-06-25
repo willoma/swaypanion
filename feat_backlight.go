@@ -201,7 +201,9 @@ func (s *Swaypanion) brightnessHandler(args []string, w io.Writer) error {
 		return err
 	}
 
-	s.notification.NotifyLevel("brightness", b)
+	if s.notification != nil {
+		s.notification.NotifyLevel("brightness", b)
+	}
 
 	return writeInt(w, b)
 }
