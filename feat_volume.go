@@ -171,8 +171,7 @@ func (s *Swaypanion) volumeHandler(args []string, w io.Writer) error {
 		}
 
 		if muted {
-			_, err := w.Write([]byte("muted"))
-			return err
+			return writeString(w, "muted")
 		}
 
 		return writeInt(w, volume)
@@ -215,8 +214,7 @@ func (s *Swaypanion) volumeHandler(args []string, w io.Writer) error {
 
 	if muted {
 		s.notification.NotifyLevel("volume_muted", -1)
-		_, err := w.Write([]byte("muted"))
-		return err
+		return writeString(w, "muted")
 	}
 
 	if volume < 50 {

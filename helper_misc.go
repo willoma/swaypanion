@@ -10,7 +10,12 @@ import (
 var ErrSwayClientMissing = errors.New("sway client missing")
 
 func writeInt(w io.Writer, i int) error {
-	_, err := w.Write([]byte(strconv.Itoa(i)))
+	_, err := w.Write([]byte(strconv.Itoa(i) + "\n"))
+	return err
+}
+
+func writeString(w io.Writer, s string) error {
+	_, err := w.Write([]byte(s + "\n"))
 	return err
 }
 

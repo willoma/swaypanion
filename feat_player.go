@@ -241,8 +241,7 @@ func (s *Swaypanion) playerHandler(args []string, w io.Writer) error {
 			return err
 		}
 
-		_, err = w.Write([]byte(status))
-		return err
+		return writeString(w, status)
 	case "playpause":
 		return s.player.PlayPause()
 	case "previous":

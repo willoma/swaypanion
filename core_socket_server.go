@@ -2,7 +2,6 @@ package swaypanion
 
 import (
 	"bufio"
-	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -109,12 +108,7 @@ func (s *Swaypanion) handleSocket(conn net.Conn) {
 	if procErr := reg.processor(cmdAndArgs[1:], conn); procErr != nil {
 		slog.Error("Failed to process request", "request", strings.ReplaceAll(input, string([]byte{socket.ArgSeparator}), " "), "error", procErr)
 
-		var buf bytes.Buffer
-
-		buf.WriteString(procErr.Error())
-		buf.WriteByte('\n')
-
-		if _, wErr := buf.WriteTo(conn); wErr != nil {
+		if wErr := writeString(conn, procErr.Error()); wErr != nil {
 			slog.Error("Failed to send response", "error", wErr)
 		}
 	}
