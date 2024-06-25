@@ -1,11 +1,13 @@
 package swaypanion
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"math"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/jfreymuth/pulse/proto"
@@ -48,6 +50,8 @@ type Volume struct {
 	sinkIndex uint32
 
 	announcementMu        sync.Mutex
+	volumeReceivers       []chan int
+	mutedReceivers        []chan bool
 	latestAnnouncedVolume int
 	latestAnnouncedMuted  bool
 }
@@ -210,19 +214,60 @@ func (v *Volume) announceVolume() {
 	v.latestAnnouncedVolume = volume
 	v.latestAnnouncedMuted = muted
 
-	if v.notification != nil {
-		if muted {
-			v.notification.NotifyLevel("volume_muted", -1)
-
-			return
+	if muted {
+		for _, ch := range v.mutedReceivers {
+			ch <- true
 		}
 
+		if v.notification != nil {
+			v.notification.NotifyLevel("volume_muted", -1)
+		}
+
+		return
+	}
+
+	for _, ch := range v.volumeReceivers {
+		ch <- volume
+	}
+
+	if v.notification != nil {
 		if volume < 50 {
 			v.notification.NotifyLevel("volume_low", volume)
 		} else {
 			v.notification.NotifyLevel("volume_high", volume)
 
 		}
+	}
+}
+
+func (v *Volume) Subscribe() (volume <-chan int, muted <-chan bool, unsubscribe func()) {
+	v.announcementMu.Lock()
+	defer v.announcementMu.Unlock()
+
+	volumeCh := make(chan int, 2)
+	mutedCh := make(chan bool, 2)
+	v.volumeReceivers = append(v.volumeReceivers, volumeCh)
+	v.mutedReceivers = append(v.mutedReceivers, mutedCh)
+
+	return volumeCh, mutedCh, func() {
+		v.announcementMu.Lock()
+		defer v.announcementMu.Unlock()
+
+		newVol := make([]chan int, 0, len(v.volumeReceivers)-1)
+		for _, vol := range v.volumeReceivers {
+			if vol != volumeCh {
+				newVol = append(newVol, vol)
+			}
+		}
+		v.volumeReceivers = newVol
+
+		newMut := make([]chan bool, 0, len(v.mutedReceivers)-1)
+		for _, mut := range v.mutedReceivers {
+			if mut != mutedCh {
+				newMut = append(newMut, mut)
+			}
+		}
+		v.mutedReceivers = newMut
 	}
 }
 
@@ -262,6 +307,33 @@ func (s *Swaypanion) volumeHandler(args []string, w io.Writer) error {
 		}
 
 		return s.volume.SetVolume(value)
+	case "subscribe":
+		volume, muted, unsubscribe := s.volume.Subscribe()
+		for {
+			select {
+			case vol := <-volume:
+				if err := writeInt(w, vol); err != nil {
+					unsubscribe()
+
+					if strings.Contains(err.Error(), "broken pipe") {
+						return nil
+					}
+
+					return fmt.Errorf("failed to send volume to client: %w", err)
+
+				}
+			case <-muted:
+				if err := writeString(w, "muted"); err != nil {
+					unsubscribe()
+
+					if strings.Contains(err.Error(), "broken pipe") {
+						return nil
+					}
+
+					return fmt.Errorf("failed to send muted to client: %w", err)
+				}
+			}
+		}
 	default:
 		return s.unknownArgument(w, "volume", args[0])
 	}
@@ -279,5 +351,6 @@ func (s *Swaypanion) registerVolume() {
 		"down", "make the volume lower",
 		"mute", "toggle the mute status",
 		"set X", "set the volume to X percent",
+		"subscribe", "receive the volume as soon as it changes",
 	)
 }
