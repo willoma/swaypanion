@@ -51,9 +51,7 @@ type Volume struct {
 
 	announcementMu        sync.Mutex
 	volumeReceivers       []chan int
-	mutedReceivers        []chan bool
 	latestAnnouncedVolume int
-	latestAnnouncedMuted  bool
 }
 
 func NewVolume(conf VolumeConfig, notification *Notification) (*Volume, error) {
@@ -130,13 +128,17 @@ func (v *Volume) currentRaw(roundedToStep bool) (float64, bool, error) {
 	return current, repl.Mute, nil
 }
 
-func (v *Volume) GetVolume() (volume int, muted bool, err error) {
+func (v *Volume) GetVolume() (volume int, err error) {
 	value, mute, err := v.currentRaw(false)
 	if err != nil {
-		return 0, false, err
+		return 0, err
 	}
 
-	return int(math.Round(value / volumeOnePercentRaw)), mute, nil
+	if mute {
+		return -1, nil
+	}
+
+	return int(math.Round(value / volumeOnePercentRaw)), nil
 }
 
 func (v *Volume) set(value int) error {
@@ -186,19 +188,19 @@ func (v *Volume) VolumeDown() error {
 }
 
 func (v *Volume) ToggleMute() error {
-	_, muted, err := v.GetVolume()
+	volume, err := v.GetVolume()
 	if err != nil {
 		return err
 	}
 
 	return v.paClient.Request(&proto.SetSinkMute{
 		SinkIndex: v.sinkIndex,
-		Mute:      !muted,
+		Mute:      volume != -1,
 	}, nil)
 }
 
 func (v *Volume) announceVolume() {
-	volume, muted, err := v.GetVolume()
+	volume, err := v.GetVolume()
 	if err != nil {
 		slog.Error("Failed to read volume", "error", err)
 		return
@@ -207,49 +209,36 @@ func (v *Volume) announceVolume() {
 	v.announcementMu.Lock()
 	defer v.announcementMu.Unlock()
 
-	if volume == v.latestAnnouncedVolume && muted == v.latestAnnouncedMuted {
+	if volume == v.latestAnnouncedVolume {
 		return
 	}
 
 	v.latestAnnouncedVolume = volume
-	v.latestAnnouncedMuted = muted
-
-	if muted {
-		for _, ch := range v.mutedReceivers {
-			ch <- true
-		}
-
-		if v.notification != nil {
-			v.notification.NotifyLevel("volume_muted", -1)
-		}
-
-		return
-	}
 
 	for _, ch := range v.volumeReceivers {
 		ch <- volume
 	}
 
 	if v.notification != nil {
-		if volume < 50 {
+		switch {
+		case volume == -1:
+			v.notification.NotifyLevel("volume_muted", -1)
+		case volume < 50:
 			v.notification.NotifyLevel("volume_low", volume)
-		} else {
+		default:
 			v.notification.NotifyLevel("volume_high", volume)
-
 		}
 	}
 }
 
-func (v *Volume) Subscribe() (volume <-chan int, muted <-chan bool, unsubscribe func()) {
+func (v *Volume) Subscribe() (volume <-chan int, unsubscribe func()) {
 	v.announcementMu.Lock()
 	defer v.announcementMu.Unlock()
 
 	volumeCh := make(chan int, 2)
-	mutedCh := make(chan bool, 2)
 	v.volumeReceivers = append(v.volumeReceivers, volumeCh)
-	v.mutedReceivers = append(v.mutedReceivers, mutedCh)
 
-	return volumeCh, mutedCh, func() {
+	return volumeCh, func() {
 		v.announcementMu.Lock()
 		defer v.announcementMu.Unlock()
 
@@ -260,14 +249,6 @@ func (v *Volume) Subscribe() (volume <-chan int, muted <-chan bool, unsubscribe 
 			}
 		}
 		v.volumeReceivers = newVol
-
-		newMut := make([]chan bool, 0, len(v.mutedReceivers)-1)
-		for _, mut := range v.mutedReceivers {
-			if mut != mutedCh {
-				newMut = append(newMut, mut)
-			}
-		}
-		v.mutedReceivers = newMut
 	}
 }
 
@@ -277,12 +258,12 @@ func (v *Volume) Close() error {
 
 func (s *Swaypanion) volumeHandler(args []string, w io.Writer) error {
 	if len(args) == 0 {
-		volume, muted, err := s.volume.GetVolume()
+		volume, err := s.volume.GetVolume()
 		if err != nil {
 			return err
 		}
 
-		if muted {
+		if volume == -1 {
 			return writeString(w, "muted")
 		}
 
@@ -308,30 +289,26 @@ func (s *Swaypanion) volumeHandler(args []string, w io.Writer) error {
 
 		return s.volume.SetVolume(value)
 	case "subscribe":
-		volume, muted, unsubscribe := s.volume.Subscribe()
+		volume, unsubscribe := s.volume.Subscribe()
 		for {
-			select {
-			case vol := <-volume:
-				if err := writeInt(w, vol); err != nil {
-					unsubscribe()
+			vol := <-volume
 
-					if strings.Contains(err.Error(), "broken pipe") {
-						return nil
-					}
+			var err error
+			if vol == -1 {
+				err = writeString(w, "muted")
+			} else {
+				err = writeInt(w, vol)
+			}
 
-					return fmt.Errorf("failed to send volume to client: %w", err)
+			if err != nil {
+				unsubscribe()
 
+				if strings.Contains(err.Error(), "broken pipe") {
+					return nil
 				}
-			case <-muted:
-				if err := writeString(w, "muted"); err != nil {
-					unsubscribe()
 
-					if strings.Contains(err.Error(), "broken pipe") {
-						return nil
-					}
+				return fmt.Errorf("failed to send volume to client: %w", err)
 
-					return fmt.Errorf("failed to send muted to client: %w", err)
-				}
 			}
 		}
 	default:
