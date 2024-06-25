@@ -29,18 +29,18 @@ func (c CommandType) defaultIfInvalid() CommandType {
 
 type config struct {
 	Notification NotificationConfig `yaml:"notification"`
-	Workspaces   WorkspacesConfig   `yaml:"workspaces"`
 	Backlight    BacklightConfig    `yaml:"backlight"`
 	Player       PlayerConfig       `yaml:"player"`
 	Volume       VolumeConfig       `yaml:"volume"`
+	Workspaces   WorkspacesConfig   `yaml:"workspaces"`
 }
 
 func (c *config) haveDefaults() {
 	c.Notification = c.Notification.withDefaults()
-	c.Workspaces = c.Workspaces.withDefaults()
 	c.Backlight = c.Backlight.withDefaults()
 	c.Player = c.Player.withDefaults()
 	c.Volume = c.Volume.withDefaults()
+	c.Workspaces = c.Workspaces.withDefaults()
 }
 
 func newConfig() (*config, error) {

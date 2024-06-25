@@ -261,7 +261,7 @@ func (s *Swaypanion) registerPlayer() {
 
 	s.register(
 		"player", s.playerHandler, "get or change the audio player status",
-		"", "launch the player",
+		"", "start or show the player",
 		"playpause", "play or pause the music",
 		"previous", "go back to previous track",
 		"next", "skip to next track",

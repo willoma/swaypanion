@@ -27,15 +27,3 @@ func execCmd(sway *SwayClient, commandType CommandType, command string) error {
 
 	return nil
 }
-
-// func receiveSwayEvent[T sway.Event](eventType i3.EventType, handleEvent func(T)) func() error {
-// 	receiver := i3.Subscribe(eventType)
-
-// 	go func() {
-// 		for receiver.Next() {
-// 			handleEvent(receiver.Event().(T))
-// 		}
-// 	}()
-
-// 	return receiver.Close
-// }

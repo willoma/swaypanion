@@ -36,7 +36,7 @@ func NewWorkspaces(conf WorkspacesConfig, sway *SwayClient) (*Workspaces, error)
 }
 
 func (a *Workspaces) GoToPrevious() error {
-	rank, workspaces, err := currentWorkspace(a.sway)
+	rank, workspaces, err := a.sway.currentWorkspace()
 	if err != nil {
 		return err
 	}
@@ -69,7 +69,7 @@ func (a *Workspaces) GoToPrevious() error {
 }
 
 func (a *Workspaces) GoToNext() error {
-	rank, workspaces, err := currentWorkspace(a.sway)
+	rank, workspaces, err := a.sway.currentWorkspace()
 	if err != nil {
 		return err
 	}
@@ -102,7 +102,7 @@ func (a *Workspaces) GoToNext() error {
 }
 
 func (a *Workspaces) MoveToPrevious() error {
-	rank, workspaces, err := currentWorkspace(a.sway)
+	rank, workspaces, err := a.sway.currentWorkspace()
 	if err != nil {
 		return err
 	}
@@ -136,7 +136,7 @@ func (a *Workspaces) MoveToPrevious() error {
 }
 
 func (a *Workspaces) MoveToNext() error {
-	rank, workspaces, err := currentWorkspace(a.sway)
+	rank, workspaces, err := a.sway.currentWorkspace()
 	if err != nil {
 		return err
 	}
