@@ -32,6 +32,7 @@ type config struct {
 	Backlight    BacklightConfig    `yaml:"backlight"`
 	Player       PlayerConfig       `yaml:"player"`
 	Volume       VolumeConfig       `yaml:"volume"`
+	Windows      WindowsConfig      `yaml:"windows"`
 	Workspaces   WorkspacesConfig   `yaml:"workspaces"`
 }
 
@@ -40,6 +41,7 @@ func (c *config) haveDefaults() {
 	c.Backlight = c.Backlight.withDefaults()
 	c.Player = c.Player.withDefaults()
 	c.Volume = c.Volume.withDefaults()
+	c.Windows = c.Windows.withDefaults()
 	c.Workspaces = c.Workspaces.withDefaults()
 }
 

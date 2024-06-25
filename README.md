@@ -8,7 +8,7 @@ Swaypanion tries to combine different useful features for sway and similar deskt
 - player control
 - volume control, with _Freedesktop_ notification
 - dynamic workspaces
-
+- selective window hiding
 
 ## Socket and client
 

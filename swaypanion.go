@@ -26,6 +26,7 @@ type Swaypanion struct {
 	backlight    *Backlight
 	player       *Player
 	volume       *Volume
+	windows      *Windows
 	workspaces   *Workspaces
 
 	socket net.Listener
@@ -39,6 +40,7 @@ func (s *Swaypanion) registerProcessors() {
 	s.registerBacklight()
 	s.registerPlayer()
 	s.registerVolume()
+	s.registerWindows()
 	s.registerWorkspaces()
 }
 
@@ -69,6 +71,10 @@ func New() (*Swaypanion, error) {
 	}
 
 	if s.volume, err = NewVolume(s.conf.Volume); err != nil {
+		return nil, err
+	}
+
+	if s.windows, err = NewWindows(s.conf.Windows, s.sway); err != nil {
 		return nil, err
 	}
 
