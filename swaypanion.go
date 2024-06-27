@@ -62,7 +62,7 @@ func New() (*Swaypanion, error) {
 		return nil, err
 	}
 
-	if s.backlight, err = NewBacklight(s.conf.Backlight); err != nil {
+	if s.backlight, err = NewBacklight(s.conf.Backlight, s.notification); err != nil {
 		return nil, err
 	}
 
@@ -97,6 +97,8 @@ func (s *Swaypanion) Stop() {
 	}
 
 	s.player.Close()
+
+	s.backlight.Close()
 
 	if s.socket != nil {
 		if err := s.socket.Close(); err != nil {

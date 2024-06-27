@@ -7,7 +7,7 @@ import (
 
 const (
 	subscriptionBuffer     = 2
-	subscriptionDedupDelay = 250 * time.Millisecond
+	subscriptionDedupDelay = time.Second
 )
 
 type subscription[T comparable] struct {

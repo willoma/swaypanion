@@ -1,14 +1,16 @@
 package swaypanion
 
 import (
-	"bytes"
 	"errors"
+	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -18,15 +20,17 @@ const (
 
 	defaultBrightnessMinimum  = 1
 	defaultBrightnessStepSize = 5
+	defaultPollInterval       = 500 * time.Millisecond
 )
 
 var ErrNoBacklightAvailable = errors.New("no backlight device available")
 
 type BacklightConfig struct {
-	Disable    bool   `yaml:"disable"`
-	DeviceName string `yaml:"device_name"`
-	Minimum    int    `yaml:"minimum"`
-	StepSize   int    `yaml:"step_size"`
+	Disable      bool          `yaml:"disable"`
+	DeviceName   string        `yaml:"device_name"`
+	Minimum      int           `yaml:"minimum"`
+	StepSize     int           `yaml:"step_size"`
+	PollInterval time.Duration `yaml:"interval"`
 }
 
 func (c BacklightConfig) withDefaults() BacklightConfig {
@@ -38,18 +42,32 @@ func (c BacklightConfig) withDefaults() BacklightConfig {
 		c.StepSize = defaultBrightnessStepSize
 	}
 
+	if c.PollInterval == 0 {
+		c.PollInterval = defaultPollInterval
+	}
+
+	if c.PollInterval > subscriptionDedupDelay {
+		c.PollInterval = subscriptionDedupDelay
+	}
+
 	return c
 }
 
 type Backlight struct {
+	conf         BacklightConfig
+	notification *Notification
+
 	dataFilePath  string
 	maximumRaw    int
 	minimumRaw    int
 	stepSizeRaw   float64
 	onePercentRaw float64
+
+	subscriptions *subscription[int]
+	pollStop      chan bool
 }
 
-func NewBacklight(conf BacklightConfig) (*Backlight, error) {
+func NewBacklight(conf BacklightConfig, notification *Notification) (*Backlight, error) {
 	if conf.Disable {
 		return nil, nil
 	}
@@ -92,72 +110,150 @@ func NewBacklight(conf BacklightConfig) (*Backlight, error) {
 
 	onePercentRaw := float64(maximumRaw) / 100
 
-	return &Backlight{
+	b := &Backlight{
+		conf:          conf,
+		notification:  notification,
 		dataFilePath:  dataFilePath,
 		maximumRaw:    maximumRaw,
 		minimumRaw:    int(math.Round(float64(conf.Minimum) * onePercentRaw)),
 		stepSizeRaw:   float64(conf.StepSize) * onePercentRaw,
 		onePercentRaw: onePercentRaw,
-	}, nil
+		subscriptions: newSubscription[int](),
+	}
+	go b.poll()
+
+	return b, nil
 }
 
-func (b *Backlight) currentRaw(roundedToStep bool) (float64, error) {
-	currentContent, err := os.ReadFile(b.dataFilePath)
+func (b *Backlight) Close() {
+	if b.pollStop != nil {
+		close(b.pollStop)
+	}
+}
+
+func (b *Backlight) poll() {
+	poller := time.NewTicker(b.conf.PollInterval)
+	defer func() {
+		poller.Stop()
+		b.pollStop = nil
+	}()
+	b.pollStop = make(chan bool, 1)
+
+	var knownBrightness string
+	for {
+		select {
+		case <-poller.C:
+			brightness, err := b.getRawData()
+			if err != nil {
+				slog.Error("Failed to get brightness", "error", err)
+			}
+
+			if brightness == knownBrightness {
+				continue
+			}
+
+			// Avoid publishing before reading for the first time
+			if knownBrightness != "" {
+				raw, err := b.rawDataToInt(brightness)
+				if err != nil {
+					slog.Error("Failed to convert brightness", "error", err)
+				}
+
+				b.publish(raw)
+			}
+
+			knownBrightness = brightness
+		case <-b.pollStop:
+			return
+		}
+	}
+
+}
+
+func (b *Backlight) publish(raw int) {
+	percent := b.rawToPercent(raw)
+
+	if !b.subscriptions.Publish(percent) {
+		return
+	}
+
+	if b.notification != nil {
+		b.notification.NotifyLevel("brightness", percent)
+	}
+}
+
+func (b *Backlight) rawToPercent(raw int) int {
+	return int(math.Round(float64(raw) / b.onePercentRaw))
+}
+
+func (b *Backlight) percentToRaw(percent int) int {
+	return int(math.Round(float64(percent) * b.onePercentRaw))
+}
+
+func (b *Backlight) roundToStep(raw int) int {
+	return int(math.Round(float64(raw)/b.stepSizeRaw) * b.stepSizeRaw)
+}
+
+func (b *Backlight) rawDataToInt(data string) (int, error) {
+	return strconv.Atoi(strings.TrimSpace(data))
+}
+
+func (b *Backlight) getRawData() (string, error) {
+	data, err := os.ReadFile(b.dataFilePath)
+	return string(data), err
+}
+
+func (b *Backlight) get() (int, error) {
+	data, err := b.getRawData()
 	if err != nil {
 		return 0, err
 	}
 
-	current, err := strconv.ParseFloat(string(bytes.TrimSpace(currentContent)), 64)
+	return b.rawDataToInt(data)
+}
 
-	if roundedToStep {
-		current = current / b.stepSizeRaw * b.stepSizeRaw
+func (b *Backlight) set(raw int) error {
+	// Make sure value is between 0 and 100%
+	raw = max(min(raw, b.maximumRaw), 0)
+
+	if err := os.WriteFile(b.dataFilePath, []byte(strconv.Itoa(raw)), 0x644); err != nil {
+		return err
 	}
 
-	return current, err
+	b.publish(raw)
+
+	return nil
 }
 
 func (b *Backlight) GetBrightness() (int, error) {
-	value, err := b.currentRaw(false)
+	value, err := b.get()
 	if err != nil {
 		return 0, err
 	}
 
-	return int(math.Round(value / b.onePercentRaw)), nil
+	return b.rawToPercent(value), nil
 }
+
 func (b *Backlight) SetBrightness(percent int) error {
-	percent = max(min(percent, 100), 0)
-
-	value := int(math.Round(float64(percent) * b.onePercentRaw))
-
-	return os.WriteFile(b.dataFilePath, []byte(strconv.Itoa(value)), 0x644)
+	return b.set(b.percentToRaw(percent))
 }
 
 func (b *Backlight) BrightnessUp() error {
-	current, err := b.currentRaw(true)
+	current, err := b.get()
 	if err != nil {
 		return err
 	}
 
-	target := min(
-		int(math.Round(current+b.stepSizeRaw)),
-		b.maximumRaw,
-	)
-
-	return os.WriteFile(b.dataFilePath, []byte(strconv.Itoa(target)), 0x644)
+	return b.set(b.roundToStep(current) + int(b.stepSizeRaw))
 }
 
 func (b *Backlight) BrightnessDown() error {
-	current, err := b.currentRaw(true)
+	current, err := b.get()
 	if err != nil {
 		return err
 	}
 
-	target := max(
-		int(math.Round(current-b.stepSizeRaw)),
-		b.minimumRaw,
-	)
-
-	return os.WriteFile(b.dataFilePath, []byte(strconv.Itoa(target)), 0x644)
+	return b.set(b.roundToStep(current) - int(b.stepSizeRaw))
 }
 
 func (s *Swaypanion) brightnessHandler(args []string, w io.Writer) error {
@@ -172,13 +268,9 @@ func (s *Swaypanion) brightnessHandler(args []string, w io.Writer) error {
 
 	switch args[0] {
 	case "up":
-		if err := s.backlight.BrightnessUp(); err != nil {
-			return err
-		}
+		return s.backlight.BrightnessUp()
 	case "down":
-		if err := s.backlight.BrightnessDown(); err != nil {
-			return err
-		}
+		return s.backlight.BrightnessDown()
 	case "set":
 		if len(args) < 2 {
 			return missingArgument("brightness value")
@@ -189,23 +281,27 @@ func (s *Swaypanion) brightnessHandler(args []string, w io.Writer) error {
 			return wrongIntArgument(args[1])
 		}
 
-		if err := s.backlight.SetBrightness(value); err != nil {
-			return err
+		return s.backlight.SetBrightness(value)
+	case "subscribe":
+		status, id := s.backlight.subscriptions.Subscribe()
+
+		for st := range status {
+			if err := writeInt(w, st); err != nil {
+				s.backlight.subscriptions.Unsubscribe(id)
+
+				if strings.Contains(err.Error(), "broken pipe") {
+					return nil
+				}
+
+				return fmt.Errorf("failed to send brightness to client: %w", err)
+
+			}
 		}
+
+		return nil
 	default:
 		return s.unknownArgument(w, "brightness", args[0])
 	}
-
-	b, err := s.backlight.GetBrightness()
-	if err != nil {
-		return err
-	}
-
-	if s.notification != nil {
-		s.notification.NotifyLevel("brightness", b)
-	}
-
-	return writeInt(w, b)
 }
 
 func (s *Swaypanion) registerBacklight() {
@@ -219,5 +315,6 @@ func (s *Swaypanion) registerBacklight() {
 		"up", "make the screen brighter",
 		"down", "make the screen dimmer",
 		"set X", "set the screen brightness to X percent",
+		"subscribe", "receive the brightness as soon as it changes",
 	)
 }
