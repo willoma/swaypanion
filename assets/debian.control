@@ -1,0 +1,6 @@
+Package: swaypanion
+Version: 0.0.0
+Architecture: amd64
+Maintainer: Willow Maccagnoni <willow.maccagnoni@gmail.com>
+Description: A companion app for sway
+Homepage: https://github.com/willoma/swaypanion/
