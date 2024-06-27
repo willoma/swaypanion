@@ -28,8 +28,8 @@ var ErrNoBacklightAvailable = errors.New("no backlight device available")
 type BacklightConfig struct {
 	Disable      bool          `yaml:"disable"`
 	DeviceName   string        `yaml:"device_name"`
-	Minimum      int           `yaml:"minimum"`
-	StepSize     int           `yaml:"step_size"`
+	Minimum      uint          `yaml:"minimum"`
+	StepSize     uint          `yaml:"step_size"`
 	PollInterval time.Duration `yaml:"interval"`
 }
 
@@ -213,8 +213,8 @@ func (b *Backlight) get() (int, error) {
 }
 
 func (b *Backlight) set(raw int) error {
-	// Make sure value is between 0 and 100%
-	raw = max(min(raw, b.maximumRaw), 0)
+	// Make sure value is between defined minimum and absolute maximum
+	raw = max(min(raw, b.maximumRaw), b.minimumRaw)
 
 	if err := os.WriteFile(b.dataFilePath, []byte(strconv.Itoa(raw)), 0x644); err != nil {
 		return err
