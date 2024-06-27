@@ -110,17 +110,17 @@ func (v *Volume) currentRaw(roundedToStep bool) (float64, bool, error) {
 		return 0, false, err
 	}
 
-	var current float64
+	var currentTotal uint32
 
 	// Take the volume as the average across all channels.
 	for _, ch := range repl.ChannelVolumes {
-		current += float64(ch)
+		currentTotal += ch
 	}
 
-	current = current / float64(len(repl.ChannelVolumes))
+	current := float64(currentTotal) / float64(len(repl.ChannelVolumes))
 
 	if roundedToStep {
-		current = current / v.stepSizeRaw * v.stepSizeRaw
+		current = math.Round(current/v.stepSizeRaw) * v.stepSizeRaw
 	}
 
 	return current, repl.Mute, nil
