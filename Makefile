@@ -9,6 +9,7 @@ swaypanionc:
 deb: swaypanion swaypanionc
 	mkdir -p pkg/swaypanion/DEBIAN
 	cp assets/debian.control pkg/swaypanion/DEBIAN/control
+	cp assets/debian.postinst pkg/swaypanion/DEBIAN/postinst
 
 	mkdir -p pkg/swaypanion/usr/bin
 	cp swaypanion swaypanionc pkg/swaypanion/usr/bin/
