@@ -14,7 +14,7 @@ func main() {
 
 	conn, err := net.Dial("unix", socketpath)
 	if err != nil {
-		println("Failed to connect to UNIX socket: ", err.Error())
+		printError("Failed to connect to UNIX socket", err)
 	}
 
 	defer conn.Close()
@@ -33,16 +33,23 @@ func main() {
 	buf.WriteByte(socket.EndOfCommand)
 
 	if _, err := buf.WriteTo(conn); err != nil {
-		println("Failed to send command: ", err)
+		printError("Failed to send command", err)
 	}
 
 	scanner := bufio.NewScanner(conn)
 
 	for scanner.Scan() {
-		println(scanner.Text())
+		if _, err := os.Stdout.Write(append(scanner.Bytes(), '\n')); err != nil {
+			printError("Failed to print to output", err)
+		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		println("Failed to read response from UNIX socket: ", err)
+		printError("Failed to read response from UNIX socket", err)
 	}
+}
+
+func printError(msg string, err error) {
+	os.Stderr.WriteString(msg + ": " + err.Error() + "\n")
+	os.Exit(1)
 }
