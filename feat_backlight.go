@@ -18,9 +18,10 @@ const (
 	brightnessEntryFile    = "brightness"
 	maxBrightnessEntryFile = "max_brightness"
 
-	defaultBrightnessMinimum  = 1
-	defaultBrightnessStepSize = 5
-	defaultPollInterval       = 500 * time.Millisecond
+	defaultBrightnessMinimum      = 1
+	defaultBrightnessStepSize     = 5
+	defaultPollInterval           = 500 * time.Millisecond
+	defaultBrightnessStatusFormat = `{"text": "<percent> %", "percentage": <percent>}`
 )
 
 var ErrNoBacklightAvailable = errors.New("no backlight device available")
@@ -31,6 +32,7 @@ type BacklightConfig struct {
 	Minimum      uint          `yaml:"minimum"`
 	StepSize     uint          `yaml:"step_size"`
 	PollInterval time.Duration `yaml:"interval"`
+	StatusFormat string        `yaml:"status_format"`
 }
 
 func (c BacklightConfig) withDefaults() BacklightConfig {
@@ -48,6 +50,10 @@ func (c BacklightConfig) withDefaults() BacklightConfig {
 
 	if c.PollInterval > subscriptionDedupDelay {
 		c.PollInterval = subscriptionDedupDelay
+	}
+
+	if c.StatusFormat == "" {
+		c.StatusFormat = defaultBrightnessStatusFormat
 	}
 
 	return c
@@ -177,6 +183,10 @@ func (b *Backlight) poll() {
 
 }
 
+func (b *Backlight) formatStatus(raw int) string {
+	return strings.ReplaceAll(b.conf.StatusFormat, "<percent>", strconv.Itoa(b.rawToPercent(raw)))
+}
+
 func (b *Backlight) publish(raw int) {
 	percent := b.rawToPercent(raw)
 
@@ -292,8 +302,8 @@ func (s *Swaypanion) brightnessHandler(args []string, w io.Writer) error {
 	case "subscribe":
 		status, id := s.backlight.subscriptions.Subscribe()
 
-		for st := range status {
-			if err := writeInt(w, st); err != nil {
+		for b := range status {
+			if err := writeString(w, s.backlight.formatStatus(b)); err != nil {
 				s.backlight.subscriptions.Unsubscribe(id)
 
 				if strings.Contains(err.Error(), "broken pipe") {
