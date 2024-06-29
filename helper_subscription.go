@@ -18,9 +18,10 @@ type subscription[T comparable] struct {
 	lastSend  time.Time
 }
 
-func newSubscription[T comparable]() *subscription[T] {
+func newSubscription[T comparable](initialValue T) *subscription[T] {
 	return &subscription[T]{
 		receivers: make(map[uint32]chan T),
+		lastValue: initialValue,
 	}
 }
 
@@ -31,7 +32,6 @@ func (s *subscription[T]) Subscribe() (channel <-chan T, id uint32) {
 	ch := make(chan T, subscriptionBuffer)
 
 	id = s.nextID
-	s.nextID++
 	s.receivers[id] = ch
 	s.nextID++
 

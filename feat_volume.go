@@ -58,12 +58,11 @@ func NewVolume(conf VolumeConfig, notification *Notification) (*Volume, error) {
 	}
 
 	v := &Volume{
-		conf:          conf,
-		notification:  notification,
-		stepSizeRaw:   float64(conf.StepSize) * volumeOnePercentRaw,
-		paClient:      client,
-		paConn:        conn,
-		subscriptions: newSubscription[int](),
+		conf:         conf,
+		notification: notification,
+		stepSizeRaw:  float64(conf.StepSize) * volumeOnePercentRaw,
+		paClient:     client,
+		paConn:       conn,
 	}
 
 	if err := v.paClient.Request(&proto.SetClientName{Props: proto.PropList{}}, nil); err != nil {
@@ -77,6 +76,13 @@ func NewVolume(conf VolumeConfig, notification *Notification) (*Volume, error) {
 
 	v.sinkIndex = lookupSink.SinkIndex
 	v.paClient.Callback = v.paCallback
+
+	initial, err := v.GetVolume()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read volume: %w", err)
+	}
+
+	v.subscriptions = newSubscription(initial)
 
 	if err := v.paClient.Request(&proto.Subscribe{Mask: proto.SubscriptionMaskSink}, nil); err != nil {
 		return nil, err

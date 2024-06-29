@@ -92,10 +92,9 @@ type Player struct {
 
 func NewPlayer(conf PlayerConfig, sway *SwayClient) (*Player, error) {
 	p := &Player{
-		conf:          conf,
-		sway:          sway,
-		signalCh:      make(chan *dbus.Signal, 10),
-		subscriptions: newSubscription[string](),
+		conf:     conf,
+		sway:     sway,
+		signalCh: make(chan *dbus.Signal, 10),
 	}
 
 	var err error
@@ -110,6 +109,13 @@ func NewPlayer(conf PlayerConfig, sway *SwayClient) (*Player, error) {
 	); err != nil {
 		return nil, err
 	}
+
+	initial, err := p.FormattedStatus()
+	if err != nil {
+		return nil, err
+	}
+
+	p.subscriptions = newSubscription(initial)
 
 	go p.dbusSignal()
 

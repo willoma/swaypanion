@@ -118,8 +118,15 @@ func NewBacklight(conf BacklightConfig, notification *Notification) (*Backlight,
 		minimumRaw:    int(math.Round(float64(conf.Minimum) * onePercentRaw)),
 		stepSizeRaw:   float64(conf.StepSize) * onePercentRaw,
 		onePercentRaw: onePercentRaw,
-		subscriptions: newSubscription[int](),
 	}
+
+	initial, err := b.get()
+	if err != nil {
+		return nil, err
+	}
+
+	b.subscriptions = newSubscription(initial)
+
 	go b.poll()
 
 	return b, nil
