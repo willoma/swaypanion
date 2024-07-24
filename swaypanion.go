@@ -1,129 +1,101 @@
 package swaypanion
 
 import (
-	"io"
-	"log/slog"
-	"net"
+	"github.com/willoma/swaypanion/config"
+	"github.com/willoma/swaypanion/modules"
+	"github.com/willoma/swaypanion/notification"
+	socketserver "github.com/willoma/swaypanion/socket/server"
+	"github.com/willoma/swaypanion/sway"
 )
 
-type processor func(args []string, w io.Writer) error
-
-type registeredProcessor struct {
-	processor   processor
-	description string
-	arguments   []struct {
-		name        string
-		description string
-	}
-}
-
 type Swaypanion struct {
-	conf *config
+	config *config.Config
 
-	sway *SwayClient
+	sway         *sway.Client
+	notification *notification.Notification
+	socketserver *socketserver.Server
 
-	notification *Notification
-	backlight    *Backlight
-	player       *Player
-	volume       *Volume
-	windows      *Windows
-	workspaces   *Workspaces
+	coreNotifier     *notification.MessageNotifier
+	stopConfigReload func()
 
-	socket net.Listener
-
-	processors map[string]registeredProcessor
-}
-
-func (s *Swaypanion) registerProcessors() {
-	s.processors = map[string]registeredProcessor{}
-
-	s.registerBacklight()
-	s.registerPlayer()
-	s.registerVolume()
-	s.registerWindows()
-	s.registerWorkspaces()
+	modules []any
 }
 
 func New() (*Swaypanion, error) {
-	var (
-		s   = &Swaypanion{}
-		err error
-	)
-
-	if s.conf, err = newConfig(); err != nil {
+	sock, err := socketserver.New()
+	if err != nil {
 		return nil, err
 	}
 
-	if s.sway, err = NewSwayClient(); err != nil {
+	notif, err := notification.New()
+	if err != nil {
 		return nil, err
 	}
 
-	if s.notification, err = NewNotification(s.conf.Notification); err != nil {
+	coreNotifier := notif.MessageNotifier()
+
+	conf, err := config.New(coreNotifier)
+	if err != nil {
 		return nil, err
 	}
 
-	if s.backlight, err = NewBacklight(s.conf.Backlight, s.notification); err != nil {
-		return nil, err
+	s := &Swaypanion{
+		config:       conf,
+		sway:         sway.NewClient(),
+		notification: notif,
+		socketserver: sock,
+		coreNotifier: coreNotifier,
 	}
 
-	if s.player, err = NewPlayer(s.conf.Player, s.sway); err != nil {
-		return nil, err
-	}
+	s.socketserver.AddCommands(conf.SocketCommands())
 
-	if s.volume, err = NewVolume(s.conf.Volume, s.notification); err != nil {
-		return nil, err
-	}
+	s.register(modules.NewBacklight(conf.Backlight, notif))
+	s.register(modules.NewPlayer(conf.Player, s.sway))
+	s.register(modules.NewVolume(conf.Volume, notif))
+	s.register(modules.NewSwayNodes(conf.SwayNodes, s.sway))
 
-	if s.windows, err = NewWindows(s.conf.Windows, s.sway); err != nil {
-		return nil, err
-	}
+	s.reloadConfig(conf)
+	s.stopConfigReload = conf.ListenReload(s.reloadConfig)
 
-	if s.workspaces, err = NewWorkspaces(s.conf.Workspaces, s.sway); err != nil {
-		return nil, err
-	}
+	coreNotifier.Notify("Swaypanion started")
 
-	s.registerProcessors()
-
-	err = s.socketServer()
-
-	return s, err
+	return s, nil
 }
 
-func (s *Swaypanion) Stop() {
-	if s.volume != nil {
-		if err := s.volume.Close(); err != nil {
-			slog.Error("Failed to close volume connection", "error", err)
+func (s *Swaypanion) Stop() error {
+	if s.stopConfigReload != nil {
+		s.stopConfigReload()
+	}
+
+	if err := s.config.Close(); err != nil {
+		return err
+	}
+
+	for _, module := range s.modules {
+		if stopperModule, ok := module.(Stopper); ok {
+			stopperModule.Stop()
 		}
 	}
 
-	s.player.Close()
+	s.sway.Close()
 
-	s.backlight.Close()
-
-	if s.socket != nil {
-		if err := s.socket.Close(); err != nil {
-			slog.Error("Failed to close socket listener", "error", err)
-		}
+	if err := s.socketserver.Close(); err != nil {
+		return err
 	}
 
-	if s.sway != nil {
-		s.sway.Close()
-	}
+	s.coreNotifier.Notify("Swaypanion stopped")
+
+	return nil
 }
 
-func (s *Swaypanion) register(name string, proc processor, description string, argsAndDescriptions ...string) {
-	r := registeredProcessor{
-		processor:   proc,
-		description: description,
-	}
-	for i := 0; i < len(argsAndDescriptions); i += 2 {
-		r.arguments = append(r.arguments, struct {
-			name        string
-			description string
-		}{
-			argsAndDescriptions[i], argsAndDescriptions[i+1],
-		})
-	}
+func (s *Swaypanion) reloadConfig(conf *config.Config) {
+	s.coreNotifier.Reconfigure(conf.CoreMessages)
+}
 
-	s.processors[name] = r
+func (s *Swaypanion) register(module any) {
+	s.modules = append(s.modules, module)
+
+	if mod, ok := module.(socketCommander); ok {
+		s.socketserver.AddCommands(mod.SocketCommands())
+	}
 }

@@ -1,12 +1,12 @@
 package main
 
 import (
-	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/willoma/swaypanion"
+	"github.com/willoma/swaypanion/common"
 )
 
 func main() {
@@ -15,22 +15,22 @@ func main() {
 	stopSignal := make(chan os.Signal, 1)
 	signal.Notify(stopSignal, syscall.SIGINT, syscall.SIGTERM)
 
-	slog.Info("Starting swaypanion")
+	common.LogInfo("Starting swaypanion")
 
 	for {
 		s, err := swaypanion.New()
 		if err != nil {
-			slog.Error("Failed to start swaypanion", "error", err)
+			common.LogError("Failed to start swaypanion", err)
 			os.Exit(1)
 		}
 
 		select {
 		case <-stopSignal:
-			slog.Info("Stopping swaypanion")
+			common.LogInfo("Stopping swaypanion")
 			s.Stop()
 			return
 		case <-reloadSignal:
-			slog.Info("Reloading swaypanion")
+			common.LogInfo("Reloading swaypanion")
 			s.Stop()
 		}
 	}

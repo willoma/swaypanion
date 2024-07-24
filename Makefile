@@ -1,23 +1,31 @@
-.PHONY: swaypanion swaypanionc
+.PHONY: swaypanion swaypanionc swaypanion-waybar
 
-swaypanion:
-	CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o swaypanion cmd/daemon/main.go
+bin: swaypanion swaypanionc swaypanion-waybar
+
+dist:
+	mkdir -p dist
+
+swaypanion: dist
+	CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -tags slog -o dist/swaypanion cmd/daemon/*.go
 
 swaypanionc:
-	CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o swaypanionc cmd/client/main.go
+	CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o dist/swaypanionc cmd/client/*.go
 
-deb: swaypanion swaypanionc
-	mkdir -p pkg/swaypanion/DEBIAN
-	cp assets/debian.control pkg/swaypanion/DEBIAN/control
-	cp assets/debian.postinst pkg/swaypanion/DEBIAN/postinst
+swaypanion-waybar:
+	CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o dist/swaypanion-waybar cmd/waybar/*.go
 
-	mkdir -p pkg/swaypanion/usr/bin
-	cp swaypanion swaypanionc pkg/swaypanion/usr/bin/
+deb: swaypanion swaypanionc swaypanion-waybar
+	mkdir -p dist/pkg/swaypanion/DEBIAN
+	cp assets/debian.control dist/pkg/swaypanion/DEBIAN/control
+	cp assets/debian.postinst dist/pkg/swaypanion/DEBIAN/postinst
 
-	mkdir -p pkg/swaypanion/usr/lib/systemd/user
-	cp assets/swaypanion.service pkg/swaypanion/usr/lib/systemd/user/
+	mkdir -p dist/pkg/swaypanion/usr/bin
+	cp dist/swaypanion dist/swaypanionc dist/swaypanion-waybar dist/pkg/swaypanion/usr/bin/
 
-	dpkg-deb --build --root-owner-group pkg/swaypanion
+	mkdir -p dist/pkg/swaypanion/usr/lib/systemd/user
+	cp assets/swaypanion.service dist/pkg/swaypanion/usr/lib/systemd/user/
+
+	dpkg-deb --build --root-owner-group dist/pkg/swaypanion
 
 clean:
-	rm -fr swaypanion swaypanionc pkg
+	rm -fr dist

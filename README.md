@@ -1,51 +1,57 @@
 # Swaypanion: a companion app for Sway
 
-Swaypanion tries to combine different useful features for sway and similar desktop environments.
+Swaypanion combines different useful features for sway and similar desktop environments.
 
 ## Features
 
-- brightness setting, with _Freedesktop_ notification
-- player control
-- volume control, with _Freedesktop_ notification
-- dynamic workspaces
-- selective window hiding
+- brightness setting
+<!-- - player control -->
+- volume control
+<!-- - dynamic workspaces -->
+<!-- - selective window hiding -->
+<!-- - _Freedesktop_ notifications -->
 
-## Socket and client
+## Swaypanion daemon
 
-*Swaypanion* listens on to a UNIX socket usually in `/run/user/<pid>/swaypanion.sock`. Its protocol is simple: when a client connects, *Swaypanion* waits for a command and its arguments. The arguments separator is the _unit separator_ (character `0x1f`), the end of command is the _enquiry_ character (`0x05`).
+Start the *Swaypanion* daemon with the `swaypanion` command.
 
-The `swaypanionc` command may be used to send commands and receive responses.
+If you have installed *Swaypanion* as a package, you may use the systemd service:
 
-The `help` command lists all available commands.
+```plain
+systemctl --user start swaypanion
+```
 
-## Commands
+The following command ensures *Swaypanion* is automatically started when you log in:
 
-| Command | Result |
-|-|-|
-| **Brightness** | |
-| `brightness` | show the screen brightness in percent |
-| `brightness up` | make the screen brighter |
-| `brightness down` | make the screen dimmer |
-| `brightness set X` | set the screen brightness to X percent |
-| **Player** | |
-| `player` | start or show the audio player |
-| `player playpause` | play or pause the music |
-| `player previous` | go back to previous track |
-| `player next` | skip to next track |
-| **Volume** | |
-| `volume` | show the volume in percent |
-| `volume up` | make the volume higher |
-| `volume down` | make the volume lower |
-| `volume mute` | toggle the mute status |
-| `volume set X` | set the volume to X percent |
-| **Windows** | |
-| `window hide_or_close` | hide or kill the focused window, according to the hide_not_close configuration |
-| **Workspaces** | |
-| `dynworkspace previous` | go to the previous workspace, creating it if needed |
-| `dynworkspace next` | go to the next workspace, creating it if needed |
-| `dynworkspace move previous` | move the focused window to the previous workspace, creating it if needed |
-| `dynworkspace move next` | move the focused window to the next workspace, creating it if needed |
+```plain
+systemctl --user enable swaypanion
+```
+
+## Swaypanion client
+
+The `swaypanionc` interactive command-line tool may be used to send commands and receive responses. Use the `help` command in the `swaypanionc` command-line shell to get the list of all available commands.
+
+Use "`:`" as a separator between a command and its argument(s). For instance:
+
+```plain
+> volume set:50
+```
+
+You may provide partial command names, as long as there is no ambiguity. For instance, `b d` translates to `brightness down`, however `b u` could mean `brightness up` or `brightness unsubscribe`: in this situation, you may use `b up`.
+
+### One-shot use
+
+If you provide commands as arguments to the `swaypanionc` command, these commands are executed, without the integrated shell.
+
+For instance:
+
+```plain
+$ swaypanionc "volume up" "brightness down"
+$ 
+```
+
+## Socket
+
+The*Swaypanion* daemon listens for connections on a UNIX socket, usually in `/run/user/<pid>/swaypanion.sock`. Its protocol is simple: when a client connects, *Swaypanion* waits for a command and its arguments. The arguments separator is the _group separator_ (character `0x1d`), the end of command is the _end of record_ character (`0x1e`).
 
 ## Notifications
-
-- Level notification on volume change
