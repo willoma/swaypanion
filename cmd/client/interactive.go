@@ -9,27 +9,18 @@ import (
 	"os/signal"
 
 	"github.com/willoma/swaypanion/socket"
-	socketclient "github.com/willoma/swaypanion/socket/client"
 )
 
 const (
-	cliFieldSeparator = ':'
-	cliEndOfCommand   = '\n'
+	interactiveFieldSeparator byte = ':'
+	interactiveEndOfCommand   byte = '\n'
 )
 
-type cli struct {
-	client *socketclient.Client
-
-	stopped chan struct{}
-}
-
-func runInteractive(client *socketclient.Client) {
-	c := &cli{client: client, stopped: make(chan struct{})}
-
+func (c *client) interactive() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
-	go c.readResponse()
+	go c.readIncomingMessages()
 	go c.handleCLI()
 
 	select {
@@ -37,18 +28,17 @@ func runInteractive(client *socketclient.Client) {
 	case <-c.stopped:
 	}
 }
-
-func (c *cli) handleCLI() {
+func (c *client) handleCLI() {
 	for {
 		msg, err := c.prompt()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				newLine()
+				c.interactivePrintNewline()
 				close(c.stopped)
 				return
 			}
 
-			printError("Failed to get instruction", err)
+			c.interactivePrintError("Failed to get instruction", err)
 		}
 
 		switch msg.Command {
@@ -56,38 +46,18 @@ func (c *cli) handleCLI() {
 			close(c.stopped)
 			return
 		case "help":
-			printLine("exit: Close the swaypanion client")
-			printLine("quit: Close the swaypanion client")
+			c.interactivePrintLine("exit: Close the swaypanion client")
+			c.interactivePrintLine("quit: Close the swaypanion client")
 		}
 
 		if err := c.client.Send(msg); err != nil {
-			printError("Failed to send command", err)
+			c.interactivePrintError("Failed to send command", err)
 		}
 	}
 }
 
-func (c *cli) readResponse() {
-	for {
-		msg, err := c.client.Read()
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				printLine("Server closed the connection")
-				close(c.stopped)
-			} else if !errors.Is(err, net.ErrClosed) {
-				printError("Error reading response", err)
-				close(c.stopped)
-			}
-
-			return
-		}
-
-		printResponse(msg)
-		printPrompt()
-	}
-}
-
-func (c *cli) prompt() (*socket.Message, error) {
-	printPrompt()
+func (c *client) prompt() (*socket.Message, error) {
+	c.interactivePrintPrompt()
 
 	var (
 		in           = make([]byte, 1)
@@ -113,11 +83,11 @@ func (c *cli) prompt() (*socket.Message, error) {
 		}
 
 		switch in[0] {
-		case cliFieldSeparator:
+		case interactiveFieldSeparator:
 			assignCurrent()
 			current = nil
 			currentField++
-		case cliEndOfCommand:
+		case interactiveEndOfCommand:
 			if current != nil {
 				assignCurrent()
 			}
@@ -125,5 +95,28 @@ func (c *cli) prompt() (*socket.Message, error) {
 		default:
 			current = append(current, in[0])
 		}
+	}
+}
+
+func (c *client) readIncomingMessages() {
+	for {
+		msg, err := c.client.Read()
+		if err != nil {
+			if errors.Is(err, net.ErrClosed) {
+				return
+			}
+
+			if errors.Is(err, io.EOF) {
+				c.printString("Server closed the connection")
+			} else {
+				c.interactivePrintError("Failed to read response", err)
+			}
+
+			close(c.stopped)
+
+			return
+		}
+
+		c.interactivePrintResponse(msg)
 	}
 }

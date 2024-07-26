@@ -3,55 +3,44 @@ package main
 import (
 	"errors"
 	"io"
-	"strings"
+	"os"
 
 	"github.com/willoma/swaypanion/socket"
-	socketclient "github.com/willoma/swaypanion/socket/client"
 )
 
-func runDirect(client *socketclient.Client, commands []string) {
-	go func() {
-		for _, c := range commands {
-			fields := strings.Split(c, string(cliFieldSeparator))
+func (c *client) direct() {
+	msg := &socket.Message{
+		Command: os.Args[1],
+	}
 
-			msg := &socket.Message{}
+	if len(os.Args) > 2 {
+		msg.Value = os.Args[2]
+	}
 
-			switch len(fields) {
-			case 0:
-				continue
-			case 1:
-				msg.Command = fields[0]
-			case 2:
-				msg.Command = fields[0]
-				msg.Value = fields[1]
-			default:
-				msg.Command = fields[0]
-				msg.Value = fields[1]
-				msg.Complement = fields[2:]
-			}
+	if len(os.Args) > 3 {
+		msg.Complement = os.Args[3:]
+	}
 
-			if err := client.Send(msg); err != nil {
-				printError("Failed to send command", err)
-			}
-		}
+	if err := c.client.Send(msg); err != nil {
+		c.directPrintError("Failed to send command", err)
+	}
 
-		if err := client.Send(&socket.Message{
-			Command: "close",
-		}); err != nil {
-			printError("Failed to send close command", err)
-		}
-	}()
+	if err := c.client.Send(&socket.Message{
+		Command: "close",
+	}); err != nil {
+		c.directPrintError("Failed to send close command", err)
+	}
 
 	for {
-		msg, err := client.Read()
+		msg, err := c.client.Read()
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
-				printError("Failed to read response", err)
+				c.directPrintError("Failed to read response", err)
 			}
 
 			return
 		}
 
-		printResponse(msg)
+		c.directPrintResponse(msg)
 	}
 }
