@@ -8,8 +8,8 @@ import (
 )
 
 type client struct {
-	bufMu sync.Mutex
-	buf   bytes.Buffer
+	printMu sync.Mutex
+	buf     bytes.Buffer
 
 	client  *socketclient.Client
 	stopped chan struct{}

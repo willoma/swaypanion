@@ -1,19 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"io"
 	"net"
 	"os"
 	"os/signal"
-
-	"github.com/willoma/swaypanion/socket"
-)
-
-const (
-	interactiveFieldSeparator byte = ':'
-	interactiveEndOfCommand   byte = '\n'
 )
 
 func (c *client) interactive() {
@@ -29,11 +23,15 @@ func (c *client) interactive() {
 	}
 }
 func (c *client) handleCLI() {
+	stdin := bufio.NewReader(os.Stdin)
+
 	for {
-		msg, err := c.prompt()
+		c.interactivePrintPrompt()
+
+		msg, err := readMessage(stdin)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				c.interactivePrintNewline()
+				os.Stdout.Write([]byte{'\n'})
 				close(c.stopped)
 				return
 			}
@@ -46,54 +44,13 @@ func (c *client) handleCLI() {
 			close(c.stopped)
 			return
 		case "help":
-			c.interactivePrintLine("exit: Close the swaypanion client")
-			c.interactivePrintLine("quit: Close the swaypanion client")
+			c.printLine("Ctrl-D: Close the swaypanion client")
+			c.printLine("exit: Close the swaypanion client")
+			c.printLine("quit: Close the swaypanion client")
 		}
 
 		if err := c.client.Send(msg); err != nil {
 			c.interactivePrintError("Failed to send command", err)
-		}
-	}
-}
-
-func (c *client) prompt() (*socket.Message, error) {
-	c.interactivePrintPrompt()
-
-	var (
-		in           = make([]byte, 1)
-		current      []byte
-		currentField int
-		message      = &socket.Message{}
-	)
-
-	assignCurrent := func() {
-		switch currentField {
-		case 0:
-			message.Command = string(current)
-		case 1:
-			message.Value = string(current)
-		default:
-			message.Complement = append(message.Complement, string(current))
-		}
-	}
-
-	for {
-		if _, err := os.Stdin.Read(in); err != nil {
-			return nil, err
-		}
-
-		switch in[0] {
-		case interactiveFieldSeparator:
-			assignCurrent()
-			current = nil
-			currentField++
-		case interactiveEndOfCommand:
-			if current != nil {
-				assignCurrent()
-			}
-			return message, nil
-		default:
-			current = append(current, in[0])
 		}
 	}
 }
@@ -107,7 +64,7 @@ func (c *client) readIncomingMessages() {
 			}
 
 			if errors.Is(err, io.EOF) {
-				c.printString("Server closed the connection")
+				c.printLine("Server closed the connection")
 			} else {
 				c.interactivePrintError("Failed to read response", err)
 			}

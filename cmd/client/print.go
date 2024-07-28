@@ -7,53 +7,62 @@ import (
 	"github.com/willoma/swaypanion/socket"
 )
 
-const (
-	prompt        = "> "
-	newlinePrompt = "\n" + prompt
-)
+func (c *client) directPrintError(msg string, err error) {
+	c.printMu.Lock()
+	defer c.printMu.Unlock()
 
+	c.unsafePrintError(msg, err)
+
+}
 func (c *client) interactivePrintError(msg string, err error) {
-	c.bufMu.Lock()
-	defer c.bufMu.Unlock()
+	c.printMu.Lock()
+	defer c.printMu.Unlock()
 
 	c.buf.WriteString("\r/!\\ ")
+
+	c.unsafePrintError(msg, err)
+
+}
+
+func (c *client) unsafePrintError(msg string, err error) {
 	c.buf.WriteString(msg)
 	c.buf.WriteString(": ")
 	c.buf.WriteString(err.Error())
-	c.buf.WriteString(newlinePrompt)
+	c.buf.WriteByte('\n')
 
 	c.buf.WriteTo(os.Stderr)
 
 	os.Exit(1)
 }
 
-func (c *client) interactivePrintLine(l string) {
-	c.bufMu.Lock()
-	defer c.bufMu.Unlock()
+func (c *client) printLine(l string) {
+	c.printMu.Lock()
+	defer c.printMu.Unlock()
 
-	c.buf.WriteByte('\n')
 	c.buf.WriteString(l)
-	c.buf.WriteString(newlinePrompt)
-
-	c.buf.WriteTo(os.Stdout)
-}
-
-func (c *client) interactivePrintNewline() {
-	c.bufMu.Lock()
-	defer c.bufMu.Unlock()
-
 	c.buf.WriteByte('\n')
 
 	c.buf.WriteTo(os.Stdout)
 }
 
 func (c *client) interactivePrintPrompt() {
-	c.bufMu.Lock()
-	defer c.bufMu.Unlock()
+	c.printMu.Lock()
+	defer c.printMu.Unlock()
 
-	c.buf.WriteString(prompt)
+	os.Stdout.WriteString("> ")
+}
 
-	c.buf.WriteTo(os.Stdout)
+func (c *client) directPrintResponse(msg *socket.Message) {
+	switch msg.Command {
+	case "help":
+		if len(msg.Complement) == 0 {
+			return
+		}
+
+		c.directPrintResponseHelp(msg.Value, msg.Complement[0], msg.Complement[1:])
+	default:
+		c.directPrintResponseCommon(msg)
+	}
 }
 
 func (c *client) interactivePrintResponse(msg *socket.Message) {
@@ -70,9 +79,18 @@ func (c *client) interactivePrintResponse(msg *socket.Message) {
 
 }
 
+func (c *client) directPrintResponseCommon(msg *socket.Message) {
+	c.printMu.Lock()
+	defer c.printMu.Unlock()
+
+	c.unsafePrintResponseCommon(msg)
+
+	c.buf.WriteTo(os.Stdout)
+}
+
 func (c *client) interactivePrintResponseCommon(msg *socket.Message) {
-	c.bufMu.Lock()
-	defer c.bufMu.Unlock()
+	c.printMu.Lock()
+	defer c.printMu.Unlock()
 
 	c.buf.WriteByte('\r')
 	c.buf.WriteString(msg.Command)
@@ -83,6 +101,14 @@ func (c *client) interactivePrintResponseCommon(msg *socket.Message) {
 		c.buf.WriteString(": ")
 	}
 
+	c.unsafePrintResponseCommon(msg)
+
+	c.buf.WriteString("> ")
+
+	c.buf.WriteTo(os.Stdout)
+}
+
+func (c *client) unsafePrintResponseCommon(msg *socket.Message) {
 	c.buf.WriteString(msg.Value)
 
 	if len(msg.Complement) > 0 {
@@ -99,16 +125,32 @@ func (c *client) interactivePrintResponseCommon(msg *socket.Message) {
 		c.buf.WriteByte(')')
 	}
 
-	c.buf.WriteString(newlinePrompt)
+	c.buf.WriteByte('\n')
+}
+
+func (c *client) directPrintResponseHelp(command, description string, arguments []string) {
+	c.printMu.Lock()
+	defer c.printMu.Unlock()
+
+	c.unsafePrintResponseHelp(command, description, arguments)
 
 	c.buf.WriteTo(os.Stdout)
 }
 
 func (c *client) interactivePrintResponseHelp(command, description string, arguments []string) {
-	c.bufMu.Lock()
-	defer c.bufMu.Unlock()
+	c.printMu.Lock()
+	defer c.printMu.Unlock()
 
 	c.buf.WriteByte('\r')
+
+	c.unsafePrintResponseHelp(command, description, arguments)
+
+	c.buf.WriteString("> ")
+
+	c.buf.WriteTo(os.Stdout)
+}
+
+func (c *client) unsafePrintResponseHelp(command, description string, arguments []string) {
 	c.buf.WriteString(command)
 	c.buf.WriteString(": ")
 	c.buf.WriteString(description)
@@ -127,18 +169,5 @@ func (c *client) interactivePrintResponseHelp(command, description string, argum
 		c.buf.WriteByte(')')
 	}
 
-	c.buf.WriteString(newlinePrompt)
-
-	c.buf.WriteTo(os.Stdout)
-}
-
-func (c *client) printString(msg string) {
-	c.bufMu.Lock()
-	defer c.bufMu.Unlock()
-
-	c.buf.WriteByte('\r')
-	c.buf.WriteString(msg)
-	c.buf.WriteString(newlinePrompt)
-
-	c.buf.WriteTo(os.Stdout)
+	c.buf.WriteByte('\n')
 }
