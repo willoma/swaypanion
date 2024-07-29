@@ -14,7 +14,10 @@ import (
 type PercentNotifier struct {
 	notification *Notification
 
+	disabled bool
+
 	timeout        int
+	formatDisabled string
 	format0        string
 	formats        []string
 	formatStepSize int
@@ -31,20 +34,40 @@ func (n *Notification) PercentNotifier() *PercentNotifier {
 }
 
 func (p *PercentNotifier) Reconfigure(conf config.NotificationSectionPercent) {
+	if conf.Enabled == nil || !*conf.Enabled {
+		p.disabled = true
+		return
+	}
+
+	p.disabled = false
 	p.timeout = int(conf.Timeout.Milliseconds())
+	p.formatDisabled = conf.FormatDisabled
 	p.format0 = conf.Format0
 	p.formats = conf.Formats
-	p.formatStepSize = 100 / len(conf.Formats)
-	p.format100 = conf.Formats[len(conf.Formats)-1]
+
+	if len(conf.Formats) == 0 {
+		p.formatStepSize = 100
+		p.formats = []string{""}
+		p.format100 = ""
+	} else {
+		p.formatStepSize = 100 / len(conf.Formats)
+		p.format100 = conf.Formats[len(conf.Formats)-1]
+	}
 }
 
 func (p *PercentNotifier) Notify(percent common.Int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	if p.disabled {
+		return
+	}
+
 	var format string
 
-	if percent.Value <= 0 {
+	if percent.Disabled {
+		format = p.formatDisabled
+	} else if percent.Value <= 0 {
 		format = p.format0
 	} else if percent.Value >= 100 {
 		format = p.format100

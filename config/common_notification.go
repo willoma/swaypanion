@@ -20,10 +20,11 @@ func (n NotificationSectionMessage) applyDefault(def NotificationSectionMessage)
 }
 
 type NotificationSectionPercent struct {
-	Enabled *bool         `yaml:"enabled"`
-	Timeout time.Duration `yaml:"timeout"`
-	Format0 string        `yaml:"format0"`
-	Formats []string      `yaml:"formats"`
+	Enabled        *bool         `yaml:"enabled"`
+	Timeout        time.Duration `yaml:"timeout"`
+	FormatDisabled string        `yaml:"format_disabled"`
+	Format0        string        `yaml:"format0"`
+	Formats        []string      `yaml:"formats"`
 }
 
 func (n NotificationSectionPercent) applyDefault(def NotificationSectionPercent) NotificationSectionPercent {
@@ -33,6 +34,10 @@ func (n NotificationSectionPercent) applyDefault(def NotificationSectionPercent)
 
 	if n.Timeout == 0 {
 		n.Timeout = def.Timeout
+	}
+
+	if n.FormatDisabled == "" {
+		n.FormatDisabled = def.FormatDisabled
 	}
 
 	if n.Format0 == "" {

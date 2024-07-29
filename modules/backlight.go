@@ -114,7 +114,10 @@ func (b *Backlight) reloadConfig(conf *config.Backlight) {
 
 	b.subscriptions.Reconfigure(common.Config[common.Int]{
 		PollInterval: conf.PollInterval,
-		PollFn:       common.IntPoller(b.get),
+		PollFn: common.IntPoller(func() (value int, disabled bool, ok bool) {
+			value, ok = b.get()
+			return
+		}),
 	})
 
 	b.notifier.Reconfigure(conf.Notification)

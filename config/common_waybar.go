@@ -7,15 +7,22 @@ import (
 )
 
 type WaybarPercent struct {
-	Icon0          string   `yaml:"icon0"`
-	Icons          []string `yaml:"icons"`
-	TextFormat0    string   `yaml:"text_format0"`
-	TextFormats    []string `yaml:"text_formats"`
-	TooltipFormat0 string   `yaml:"tooltip_format0"`
-	TooltipFormats []string `yaml:"tooltip_formats"`
+	IconDisabled          string   `yaml:"icon_disabled"`
+	Icon0                 string   `yaml:"icon0"`
+	Icons                 []string `yaml:"icons"`
+	TextFormatDisabled    string   `yaml:"text_format_disabled"`
+	TextFormat0           string   `yaml:"text_format0"`
+	TextFormats           []string `yaml:"text_formats"`
+	TooltipFormatDisabled string   `yaml:"tooltip_format_disabled"`
+	TooltipFormat0        string   `yaml:"tooltip_format0"`
+	TooltipFormats        []string `yaml:"tooltip_formats"`
 }
 
 func (w WaybarPercent) applyDefault(def WaybarPercent) WaybarPercent {
+	if w.IconDisabled == "" {
+		w.IconDisabled = def.IconDisabled
+	}
+
 	if w.Icon0 == "" {
 		w.Icon0 = def.Icon0
 	}
@@ -25,6 +32,10 @@ func (w WaybarPercent) applyDefault(def WaybarPercent) WaybarPercent {
 		copy(w.Icons, def.Icons)
 	}
 
+	if w.TextFormatDisabled == "" {
+		w.TextFormatDisabled = def.TextFormatDisabled
+	}
+
 	if w.TextFormat0 == "" {
 		w.TextFormat0 = def.TextFormat0
 	}
@@ -32,6 +43,10 @@ func (w WaybarPercent) applyDefault(def WaybarPercent) WaybarPercent {
 	if len(w.TextFormats) == 0 {
 		w.TextFormats = make([]string, len(def.TextFormats))
 		copy(w.TextFormats, def.TextFormats)
+	}
+
+	if w.TooltipFormatDisabled == "" {
+		w.TooltipFormatDisabled = def.TooltipFormatDisabled
 	}
 
 	if w.TooltipFormat0 == "" {
@@ -46,19 +61,20 @@ func (w WaybarPercent) applyDefault(def WaybarPercent) WaybarPercent {
 	return w
 }
 
-func (w WaybarPercent) FormatValue(valueStr string) (icon, text, tooltip string, ok bool) {
+func (w WaybarPercent) FormatValue(valueStr string) (icon, text, tooltip string, disabled bool) {
 	value, err := strconv.Atoi(valueStr)
-	if err != nil {
-		common.LogError(`Failed to convert "`+valueStr+`" to int`, err)
-		return "", "", "", false
-	}
+	disabled = err != nil
 
 	var (
 		textFormat    string
 		tooltipFormat string
 	)
 
-	if value <= 0 {
+	if disabled {
+		icon = w.IconDisabled
+		textFormat = w.TextFormatDisabled
+		tooltipFormat = w.TooltipFormatDisabled
+	} else if value <= 0 {
 		icon = w.Icon0
 		textFormat = w.TextFormat0
 		tooltipFormat = w.TooltipFormat0
@@ -78,7 +94,7 @@ func (w WaybarPercent) FormatValue(valueStr string) (icon, text, tooltip string,
 	text = common.ReplaceValue(textFormat, "value", valueStr)
 	tooltip = common.ReplaceValue(tooltipFormat, "value", valueStr)
 
-	return icon, text, tooltip, true
+	return icon, text, tooltip, disabled
 }
 
 type WaybarString struct {
@@ -105,7 +121,7 @@ func (w WaybarString) applyDefault(def WaybarString) WaybarString {
 	return w
 }
 
-func (w WaybarString) FormatValue(iconKey string, replaces map[string]string) (icon, text, tooltip string) {
+func (w WaybarString) FormatValue(iconKey string, replaces map[string]string) (icon, text, tooltip string, disabled bool) {
 	icon = w.Icons[iconKey]
 	text = common.ReplaceValue(w.FormatText, "icon", icon)
 	tooltip = common.ReplaceValue(w.FormatTooltip, "icon", icon)
@@ -115,5 +131,5 @@ func (w WaybarString) FormatValue(iconKey string, replaces map[string]string) (i
 		tooltip = common.ReplaceValue(tooltip, name, content)
 	}
 
-	return icon, text, tooltip
+	return icon, text, tooltip, false
 }

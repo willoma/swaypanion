@@ -5,16 +5,17 @@ type Data[T any] interface {
 }
 
 type Int struct {
-	Value int
+	Disabled bool
+	Value    int
 }
 
 func (i Int) Equal(other Int) bool {
-	return i.Value == other.Value
+	return i.Disabled == other.Disabled && i.Value == other.Value
 }
 
-func IntPoller(fn func() (int, bool)) func() (Int, bool) {
+func IntPoller(fn func() (value int, disabled, ok bool)) func() (Int, bool) {
 	return func() (Int, bool) {
-		value, ok := fn()
-		return Int{Value: value}, ok
+		value, disabled, ok := fn()
+		return Int{Disabled: disabled, Value: value}, ok
 	}
 }

@@ -10,6 +10,8 @@ import (
 type MessageNotifier struct {
 	notification *Notification
 
+	disabled bool
+
 	timeout int
 }
 
@@ -19,11 +21,21 @@ func (n *Notification) MessageNotifier() *MessageNotifier {
 	}
 }
 
-func (m *MessageNotifier) Reconfigure(config config.NotificationSectionMessage) {
-	m.timeout = int(config.Timeout.Milliseconds())
+func (m *MessageNotifier) Reconfigure(conf config.NotificationSectionMessage) {
+	if conf.Enabled == nil || !*conf.Enabled {
+		m.disabled = true
+		return
+	}
+
+	m.disabled = false
+	m.timeout = int(conf.Timeout.Milliseconds())
 }
 
 func (m *MessageNotifier) Notify(message string) {
+	if m.disabled {
+		return
+	}
+
 	call := m.notification.dbus.Object(
 		"org.freedesktop.Notifications",
 		"/org/freedesktop/Notifications",

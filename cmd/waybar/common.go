@@ -49,16 +49,11 @@ func receive(client *socketclient.Client, command string, printEvent func(*socke
 
 func intPrinter(conf config.WaybarPercent) func(msg *socket.Message) {
 	return func(msg *socket.Message) {
-		icon, text, tooltip, ok := conf.FormatValue(msg.Value)
-		if !ok {
-			return
-		}
-
-		printJSON(icon, text, tooltip)
+		printJSON(conf.FormatValue(msg.Value))
 	}
 }
 
-func printJSON(alt, text, tooltip string) {
+func printJSON(alt, text, tooltip string, disabled bool) {
 	b := &bytes.Buffer{}
 
 	b.WriteByte('{')
@@ -89,6 +84,14 @@ func printJSON(alt, text, tooltip string) {
 		b.WriteString(`"tooltip":"`)
 		jsonReplacer.WriteString(b, tooltip)
 		b.WriteByte('"')
+		hasPrevious = true
+	}
+
+	if disabled {
+		if hasPrevious {
+			b.WriteByte(',')
+		}
+		b.WriteString(`"class":"disabled"`)
 	}
 
 	b.WriteString("}\n")

@@ -101,8 +101,8 @@ func (v *Volume) reloadConfig(conf *config.Volume) {
 
 	v.working = true
 
-	if volume, ok := v.unsafeGet(); ok {
-		v.subscriptions.Publish(common.Int{Value: volume})
+	if volume, mute, ok := v.unsafeGet(); ok {
+		v.subscriptions.Publish(common.Int{Disabled: mute, Value: volume})
 	}
 }
 
@@ -114,8 +114,8 @@ func (v *Volume) paCallback(val any) {
 
 	if evt.Event.GetType() == proto.EventChange && evt.Event.GetFacility() == proto.EventSink && evt.Index == v.sinkIndex {
 		go func() {
-			if volume, ok := v.get(); ok {
-				v.subscriptions.Publish(common.Int{Value: volume})
+			if volume, mute, ok := v.get(); ok {
+				v.subscriptions.Publish(common.Int{Disabled: mute, Value: volume})
 			}
 		}()
 	}
@@ -165,25 +165,22 @@ func (v *Volume) unsafeSetRawAndGetPercent(raw float64) (percent int, ok bool) {
 
 	percent = toPercent(raw, paVolumeMaximumRaw)
 
-	v.subscriptions.Publish(common.Int{Value: percent})
+	v.subscriptions.Publish(common.Int{Disabled: false, Value: percent})
 
 	return percent, true
 }
 
-func (v *Volume) get() (int, bool) {
+func (v *Volume) get() (vol int, mute, ok bool) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
 	return v.unsafeGet()
 }
 
-func (v *Volume) unsafeGet() (int, bool) {
+func (v *Volume) unsafeGet() (vol int, mute, ok bool) {
 	raw, mute, ok := v.unsafeGetRaw()
-	if mute {
-		return -1, ok
-	}
 
-	return toPercent(raw, paVolumeMaximumRaw), ok
+	return toPercent(raw, paVolumeMaximumRaw), mute, ok
 }
 
 func (v *Volume) set(percent int) (int, bool) {
@@ -221,4 +218,26 @@ func (v *Volume) down() (int, bool) {
 	raw = roundStep(raw-v.stepRaw, v.stepRaw)
 
 	return v.unsafeSetRawAndGetPercent(raw)
+}
+
+func (v *Volume) mute() (volume int, mute, ok bool) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+
+	volume, mute, ok = v.unsafeGet()
+	if !ok {
+		return 0, false, false
+	}
+
+	if err := v.paClient.Request(&proto.SetSinkMute{
+		SinkIndex: v.sinkIndex,
+		Mute:      !mute,
+	}, nil); err != nil {
+		common.LogError("Failed to change mute status", err)
+		return volume, mute, false
+	}
+
+	v.subscriptions.Publish(common.Int{Disabled: !mute, Value: volume})
+
+	return volume, !mute, true
 }

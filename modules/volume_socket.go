@@ -17,6 +17,7 @@ func (v *Volume) SocketCommands() socketserver.Commands {
 		v.socketGet, volumeLabel+" get", "Get current volume",
 		v.socketUp, volumeLabel+" up", "Increase volume",
 		v.socketDown, volumeLabel+" down", "Decrease volume",
+		v.socketMute, volumeLabel+" mute", "Mute volume",
 		v.socketSet, volumeLabel+" set", "Set volume", "volume percent",
 		v.socketSubscribe, volumeLabel+" subscribe", "Get volume each time it changes",
 		v.socketUnsubscribe, volumeLabel+" unsubscribe", "Stop getting volume on change",
@@ -24,9 +25,17 @@ func (v *Volume) SocketCommands() socketserver.Commands {
 }
 
 func (v *Volume) socketGet(conn *socketserver.Connection, _ string, _ []string) {
-	value, ok := v.get()
+	value, mute, ok := v.get()
 	if !ok {
 		conn.SendError("failed to read volume")
+		return
+	}
+
+	if mute {
+		if err := conn.SendString(volumeLabel, "mute"); err != nil {
+			common.LogError("Failed to send mute status", err)
+		}
+
 		return
 	}
 
@@ -81,11 +90,30 @@ func (v *Volume) socketDown(conn *socketserver.Connection, _ string, _ []string)
 	}
 }
 
+func (v *Volume) socketMute(conn *socketserver.Connection, _ string, _ []string) {
+	volume, mute, ok := v.mute()
+	if !ok {
+		conn.SendError("failed to mute volume")
+	}
+
+	if mute {
+		if err := conn.SendString(volumeLabel, "mute"); err != nil {
+			common.LogError("Failed to send mute status", err)
+		}
+
+		return
+	}
+
+	if err := conn.SendInt(volumeLabel, volume); err != nil {
+		common.LogError("Failed to send volume", err)
+	}
+}
+
 func (v *Volume) socketSubscribe(conn *socketserver.Connection, _ string, _ []string) {
 	v.subscriptions.Subscribe(conn, true, func(value common.Int) {
 		var err error
 
-		if value.Value == -1 {
+		if value.Disabled {
 			err = conn.SendString(volumeLabel, "mute")
 		} else {
 			err = conn.SendInt(volumeLabel, value.Value)
