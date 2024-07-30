@@ -15,7 +15,6 @@ type Backlight struct {
 	StepSizePercent float64                    `yaml:"step_size"`
 	PollInterval    time.Duration              `yaml:"poll_interval"`
 	Notification    NotificationSectionPercent `yaml:"notification"`
-	Waybar          WaybarPercent              `yaml:"waybar"`
 }
 
 var DefaultBacklight = &Backlight{
@@ -32,18 +31,6 @@ var DefaultBacklight = &Backlight{
 			"  {value} %",
 			"  {value} %",
 		},
-	},
-	Waybar: WaybarPercent{
-		Icon0:       "",
-		Icons:       []string{"", "", ""},
-		TextFormat0: " -",
-		TextFormats: []string{
-			"  {value} %",
-			"  {value} %",
-			"  {value} %",
-		},
-		TooltipFormat0: "",
-		TooltipFormats: []string{""},
 	},
 }
 
@@ -65,8 +52,6 @@ func (b *Backlight) applyDefault() {
 	}
 
 	b.Notification = b.Notification.applyDefault(DefaultBacklight.Notification)
-
-	b.Waybar = b.Waybar.applyDefault(DefaultBacklight.Waybar)
 }
 
 func (b *Backlight) findDeviceName() {

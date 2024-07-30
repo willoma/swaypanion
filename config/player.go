@@ -3,10 +3,9 @@ package config
 type Player struct {
 	config[*Player] `yaml:"-"`
 
-	PlayerName string       `yaml:"player_name"`
-	Start      Command      `yaml:"start"`
-	Show       Command      `yaml:"show"`
-	Waybar     WaybarString `yaml:"player"`
+	PlayerName string  `yaml:"player_name"`
+	Start      Command `yaml:"start"`
+	Show       Command `yaml:"show"`
 }
 
 var DefaultPlayer = &Player{
@@ -18,16 +17,6 @@ var DefaultPlayer = &Player{
 	Show: Command{
 		Type:    CommandTypeSway,
 		Command: "[instance=spotify] move workspace current, focus",
-	},
-	Waybar: WaybarString{
-		Icons: map[string]string{
-			"no player found": " ",
-			"Playing":         " ",
-			"Paused":          " ",
-			"Stopped":         " ",
-		},
-		FormatText:    "{icon}{artist? }{artist}{title? - }{title}",
-		FormatTooltip: "{artists}{album?\n  }{album}{title?\n}{title}",
 	},
 }
 
@@ -51,6 +40,4 @@ func (p *Player) applyDefault() {
 	if p.Show.Command == "" {
 		p.Show.Command = DefaultPlayer.Show.Command
 	}
-
-	p.Waybar = p.Waybar.applyDefault(DefaultPlayer.Waybar)
 }

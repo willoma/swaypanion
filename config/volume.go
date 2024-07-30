@@ -9,7 +9,6 @@ type Volume struct {
 	SinkName     string                     `yaml:"pulseaudio_sink_name"`
 	StepSize     int                        `yaml:"pulseaudio_step_size"`
 	Notification NotificationSectionPercent `yaml:"notification"`
-	Waybar       WaybarPercent              `yaml:"waybar"`
 }
 
 var DefaultVolume = &Volume{
@@ -26,19 +25,6 @@ var DefaultVolume = &Volume{
 			" {value} %",
 		},
 	},
-	Waybar: WaybarPercent{
-		IconDisabled:       "",
-		Icon0:              "",
-		Icons:              []string{"", ""},
-		TextFormatDisabled: "",
-		TextFormat0:        " {value} %",
-		TextFormats: []string{
-			" {value} %",
-			" {value} %",
-		},
-		TooltipFormat0: "",
-		TooltipFormats: []string{""},
-	},
 }
 
 func (v *Volume) applyDefault() {
@@ -51,6 +37,4 @@ func (v *Volume) applyDefault() {
 	}
 
 	v.Notification = v.Notification.applyDefault(DefaultVolume.Notification)
-
-	v.Waybar = v.Waybar.applyDefault(DefaultVolume.Waybar)
 }

@@ -8,15 +8,16 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/willoma/swaypanion/common"
 	"gopkg.in/yaml.v3"
+
+	"github.com/willoma/swaypanion/common"
 )
 
 type notifier interface {
 	Notify(string)
 }
 
-const systemconfPath = "/etc/swaypanion.conf"
+const systemconfPath = "/etc/swaypanion/swaypanion.conf"
 
 type Config struct {
 	config[*Config] `yaml:"-"`
@@ -54,7 +55,7 @@ func New(notif notifier) (*Config, error) {
 
 	c := &Config{
 		notifier:     notif,
-		userconfPath: filepath.Join(home, ".config", "swaypanion.conf"),
+		userconfPath: filepath.Join(home, ".config", "swaypanion", "swaypanion.conf"),
 	}
 
 	if uStat, uErr := os.Stat(c.userconfPath); uErr == nil && !uStat.IsDir() {

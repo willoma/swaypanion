@@ -1,58 +1,44 @@
 package main
 
 import (
+	"flag"
 	"os"
+	"slices"
+	"strings"
 
 	"github.com/willoma/swaypanion/common"
-	"github.com/willoma/swaypanion/config"
-	socketclient "github.com/willoma/swaypanion/socket/client"
+	"github.com/willoma/swaypanion/waybar"
 )
 
 func main() {
-	if len(os.Args) == 1 {
-		showEventTypes()
-	}
+	flag.String("c", ".config/swaypanion/waybar.conf", "Path to the swaypanion-waybar configuration (default .config/swaypanion/waybar.conf)")
+	flag.Parse()
 
-	client, err := socketclient.New()
-	if err != nil {
-		printError("Failed to run socket client", err)
+	eventTypes := waybar.EventTypes()
+
+	args := flag.Args()
+	if len(args) == 0 {
+		common.LogError(
+			"Event type missing. Need one of the following event types as an argument:\n\n"+
+				strings.Join(eventTypes, "\n"),
+			nil,
+		)
+
 		os.Exit(1)
 	}
 
-	switch os.Args[1] {
-	case "brightness":
-		brightness(client)
-	case "player":
-		player(client)
-	case "volume":
-		volume(client)
-	default:
-		showEventTypes()
+	if !slices.Contains(eventTypes, args[0]) {
+		common.LogError(
+			"Unknown event type. Need one of the following event types as an argument:\n\n"+
+				strings.Join(eventTypes, "\n"),
+			nil,
+		)
+
+		os.Exit(1)
 	}
 
-	defer func() {
-		if err := client.Close(); err != nil {
-			printError("Failed to close connection to server", err)
-		}
-	}()
-}
-
-func readConfig() *config.Config {
-	conf, err := config.New(nil)
-	if err != nil {
-		printError("Failed to read configuration", err)
+	if err := waybar.Subscribe(os.Stdout, args[0]); err != nil {
+		common.LogError("Failed to subscribe", err)
+		os.Exit(1)
 	}
-
-	return conf
-}
-
-func showEventTypes() {
-	common.LogError(`Need one of the following event types as an argument:
-
-brightness
-player
-volume
-`, nil)
-
-	os.Exit(1)
 }

@@ -1,16 +1,31 @@
-package main
+package waybar
 
 import (
+	"errors"
+	"io"
 	"strings"
 
 	"github.com/willoma/swaypanion/socket"
 	socketclient "github.com/willoma/swaypanion/socket/client"
 )
 
-func player(client *socketclient.Client) {
-	conf := readConfig().Player.Waybar
+func player(w io.Writer, client *socketclient.Client, conf *config) error {
+	if err := client.Send(&socket.Message{
+		Command: "player subscribe",
+	}); err != nil {
+		return err
+	}
 
-	receive(client, "player subscribe", func(msg *socket.Message) {
+	for {
+		msg, err := client.Read()
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				return err
+			}
+
+			return nil
+		}
+
 		replaces := map[string]string{
 			"status":  msg.Value,
 			"artist":  "",
@@ -43,6 +58,7 @@ func player(client *socketclient.Client) {
 			replaces["artists"] = replaces["artist"]
 		}
 
-		printJSON(conf.FormatValue(msg.Value, replaces))
-	})
+		alt, text, tooltip, disabled := conf.Player.formatValue(msg.Value, replaces)
+		writeJSON(w, alt, text, tooltip, disabled)
+	}
 }
