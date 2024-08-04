@@ -21,22 +21,22 @@ var defaultConfig = &config{
 		Icons:       []string{"", "", ""},
 		TextFormat0: " {value} %",
 		TextFormats: []string{
-			"  {value} %",
-			"  {value} %",
-			"  {value} %",
+			" {value} %",
+			" {value} %",
+			" {value} %",
 		},
 		TooltipFormat0: "",
 		TooltipFormats: []string{""},
 	},
 	Player: configString{
 		Icons: map[string]string{
-			"no player found": " ",
-			"Playing":         " ",
-			"Paused":          " ",
-			"Stopped":         " ",
+			"no player found": "",
+			"Playing":         "",
+			"Paused":          "",
+			"Stopped":         "",
 		},
 		FormatText:    "{icon}{artist? }{artist}{title? - }{title}",
-		FormatTooltip: "{artists}{album?\n  }{album}{title?\n}{title}",
+		FormatTooltip: "{artists}{album?\n }{album}{title?\n}{title}",
 	},
 	Volume: configPercent{
 		IconDisabled:       "",
@@ -53,7 +53,22 @@ var defaultConfig = &config{
 	},
 }
 
-func readConfig() (*config, error) {
+func readConfig(configPath string) (*config, error) {
+	if configPath != "" {
+		if !filepath.IsAbs(configPath) {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return nil, err
+			}
+
+			configPath = filepath.Join(home, configPath)
+		}
+
+		if uStat, uErr := os.Stat(configPath); uErr == nil && !uStat.IsDir() {
+			return readConfigYAML(configPath)
+		}
+	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err

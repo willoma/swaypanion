@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	flag.String("c", ".config/swaypanion/waybar.conf", "Path to the swaypanion-waybar configuration (default .config/swaypanion/waybar.conf)")
+	configPath := flag.String("c", ".config/swaypanion/waybar.conf", "Path to the swaypanion-waybar configuration (default .config/swaypanion/waybar.conf)")
 	flag.Parse()
 
 	eventTypes := waybar.EventTypes()
@@ -37,7 +37,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := waybar.Subscribe(os.Stdout, args[0]); err != nil {
+	if err := waybar.Subscribe(os.Stdout, args[0], *configPath); err != nil {
 		common.LogError("Failed to subscribe", err)
 		os.Exit(1)
 	}

@@ -6,13 +6,13 @@ import (
 	socketclient "github.com/willoma/swaypanion/socket/client"
 )
 
-func Subscribe(w io.Writer, eventType string) error {
+func Subscribe(w io.Writer, eventType string, configPath string) error {
 	client, err := socketclient.New()
 	if err != nil {
 		return err
 	}
 
-	conf, err := readConfig()
+	conf, err := readConfig(configPath)
 	if err != nil {
 		return err
 	}
